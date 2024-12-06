@@ -162,7 +162,7 @@ class Install
 			DB::getInstance()->preparedQuery('UPDATE users SET password = ? WHERE id = 1;', $data->password);
 			$session = Session::getInstance();
 			$session->logout();
-			$session->forceLogin(1);
+			//$session->forceLogin(1);
 		}
 		catch (\Exception $e) {
 			Config::deleteInstance();

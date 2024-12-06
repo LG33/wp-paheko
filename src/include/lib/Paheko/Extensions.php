@@ -47,8 +47,9 @@ class Extensions
 		$ext = Plugins::get($name);
 		$ext ??= Plugins::getInstallable($name);
 		$ext ??= Modules::get($name);
-
+		
 		if (null === $ext) {
+			die($name);
 			return null;
 		}
 
@@ -67,7 +68,7 @@ class Extensions
 	static public function toggle(string $name, bool $enabled)
 	{
 		$ext = self::get($name);
-		$ext->toggle($enabled);
+		$enabled ? $ext->enable() : $ext->disable();
 	}
 
 	static protected function filterList(array &$list): void

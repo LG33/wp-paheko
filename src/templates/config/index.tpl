@@ -65,7 +65,7 @@
 		</dl>
 	</fieldset>
 
-	<fieldset>
+	{* <fieldset>
 		<legend>Site web</legend>
 		<p class="help">
 			Cette option permet d'activer ou désactiver la visibilité publique du site web intégré à Paheko.<br/>
@@ -82,7 +82,7 @@
 				{input type="url" name="org_web" source=$config label="Site web externe"}
 			</dl>
 		</div>
-	</fieldset>
+	</fieldset> *}
 
 	<fieldset>
 		<legend>Localisation</legend>

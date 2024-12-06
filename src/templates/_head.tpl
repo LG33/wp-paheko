@@ -112,12 +112,14 @@ if (ALERT_MESSAGE && !$dialog) {
 			</li>
 		{/if}
 
+		{*
 		{if $session->canAccess($session::SECTION_DOCUMENTS, $session::ACCESS_READ)
 			|| $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_READ)
 			|| $session->canAccess($session::SECTION_USERS, $session::ACCESS_READ)}
 			<li class="{if $current == 'docs'} current{elseif $current_parent == 'docs'} current_parent{/if}"><h3><a href="{$admin_uri}docs/" accesskey="D">{icon shape="folder"}<b>Documents</b></a></h3>
 			</li>
 		{/if}
+		*}
 
 		{if $session->canAccess($session::SECTION_WEB, $session::ACCESS_READ)}
 			<li class="{if $current == 'web'} current{elseif $current_parent == 'web'} current_parent{/if}"><h3><a href="{$admin_uri}web/" accesskey="W">{icon shape="globe"}<b>Site web</b></a></h3>
@@ -130,6 +132,7 @@ if (ALERT_MESSAGE && !$dialog) {
 			</li>
 		{/if}
 
+		{*
 		{if $logged_user && $logged_user->exists()}
 		<li class="{if $current == 'me'} current{elseif $current_parent == 'me'} current_parent{/if}"><h3><a href="{$admin_uri}me/">{icon shape="user"}<b>Mes infos personnelles</b></a></h3>
 			<ul>
@@ -147,6 +150,7 @@ if (ALERT_MESSAGE && !$dialog) {
 			<h3><a href="{$help_url}" target="_dialog" accesskey="?">{icon shape="help"}<b>Aide</b></a></h3>
 		</li>
 		{/if}
+		*}
 
 	{elseif !defined('Paheko\SKIP_STARTUP_CHECK')}
 		{if $config.org_web || !$config.site_disabled}
@@ -157,6 +161,23 @@ if (ALERT_MESSAGE && !$dialog) {
 	</ul>
 </nav>
 
+<div class="top">
+	{if $logged_user && $logged_user->exists()}
+	{linkmenu label="" shape="user" right=true}
+		<h3>{$logged_user->name()}</h3>
+		<p class="help">{$logged_user.email}</p>
+		{linkbutton label="Mes infos personnelles" href="!me"}
+		{linkbutton label="Mes activités & cotisations" href="!me/services.php"}
+		{if $help_url}
+		{linkbutton shape="help" label="Aide" target="_dialog" href=$help_url}
+		{/if}
+		{if !defined('Paheko\LOCAL_LOGIN') || !LOCAL_LOGIN}
+		{linkbutton label="Me déconnecter" href="!logout.php"}
+		{/if}
+	{/linkmenu}
+	{/if}
+</div>
+</header>
 {elseif $layout === 'public'}
 <header class="public">
 	<h1><a href="{$site_url}">{if $config.files.logo}<img src="{$config->fileURL('logo', '150px')}" alt="" />{else}{$config.org_name}{/if}</a></h1>

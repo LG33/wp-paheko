@@ -1,4 +1,4 @@
-{include file="_head.tpl" title=$title current="web" hide_title=true}
+{include file="_head.tpl" title="Site web" current="web" hide_title=true}
 
 <nav class="tabs">
 	<aside>
@@ -19,7 +19,6 @@
 {if !$page && $session->canAccess($session::SECTION_WEB, $session::ACCESS_WRITE)}
 	<nav class="web config">
 		{linkmenu shape="menu" label="Administration"}
-			{linkbutton shape="table" label="Plan du site" href="sitemap.php"}
 			{linkbutton shape="menu" label="Liste de toutes les pages du site" href="all.php"}
 			{linkbutton shape="check" href="?check=internal" label="Vérifier les liens internes"}
 			{if $session->canAccess($session::SECTION_CONFIG, $session::ACCESS_ADMIN)}

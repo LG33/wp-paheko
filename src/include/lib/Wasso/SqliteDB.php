@@ -2,16 +2,14 @@
 
 namespace Paheko;
 
-use PDO;
-
-use Wasso\PDO_DB;
+use KD2\DB\SQLite3;
 use KD2\DB\DB_Exception;
 use KD2\ErrorManager;
 
 use Paheko\Users\DynamicFields;
 use Paheko\Entities\Email\Email;
 
-class DB extends PDO_DB
+class SQLiteDB extends SQLite3
 {
 	/**
 	 * Application ID pour SQLite
@@ -31,12 +29,10 @@ class DB extends PDO_DB
 
 	protected $_schema_update = 0;
 
-	protected bool $_install_check = true;
-
 	static public function getInstance()
 	{
 		if (null === self::$_instance) {
-			self::$_instance = new DB('sqlite', ['file' => DB_FILE]);
+			self::$_instance = new SQLiteDB('sqlite', ['file' => DB_FILE]);
 		}
 
 		return self::$_instance;
@@ -231,19 +227,10 @@ class DB extends PDO_DB
 		return $s;
 	}
 
-	public function disableInstallCheck(bool $disable)
-	{
-		$this->_install_check = !$disable;
-	}
-
 	public function connect(): void
 	{
 		if (null !== $this->db) {
 			return;
-		}
-
-		if ($this->_install_check && !self::isInstalled()) {
-			throw new \LogicException('Database has not been installed!');
 		}
 
 		parent::connect();
@@ -252,10 +239,10 @@ class DB extends PDO_DB
 		$this->db->exec('PRAGMA foreign_keys = ON;');
 
 		// 10 secondes
-		$this->db->setAttribute(PDO::ATTR_TIMEOUT, 10);
+		$this->db->busyTimeout(10 * 1000);
 
 		$mode = strtoupper(SQLITE_JOURNAL_MODE);
-		$set_mode = $this->db->query('PRAGMA journal_mode;')->fetchColumn();
+		$set_mode = $this->db->querySingle('PRAGMA journal_mode;');
 		$set_mode = strtoupper($set_mode);
 
 		if ($set_mode !== $mode) {
@@ -369,13 +356,13 @@ class DB extends PDO_DB
 
 	static public function getVersion($db)
 	{
-		$v = (int) $db->query('PRAGMA user_version;')->fetchColumn();
+		$v = (int) $db->querySingle('PRAGMA user_version;');
 		$v = self::parseVersion($v);
 
 		if (null === $v) {
 			try {
 				// For legacy version before 1.1.0
-				$v = $db->query('SELECT valeur FROM config WHERE cle = \'version\';')->fetchColumn();
+				$v = $db->querySingle('SELECT valeur FROM config WHERE cle = \'version\';');
 			}
 			catch (\Exception $e) {
 				throw new \RuntimeException('Cannot find application version', 0, $e);
@@ -477,7 +464,7 @@ class DB extends PDO_DB
 
 	public function lastErrorMsg()
 	{
-		return $this->db->errorInfo()[1];
+		return $this->db->lastErrorMsg();
 	}
 
 	/**

@@ -26,8 +26,8 @@ DirectoryIndex index.php index.html
 	RewriteEngine on
 	## Remplacer dans les lignes suivantes
 	## /paheko/ par le nom du sous-répertoire où est installé Paheko
- 	RewriteBase /paheko/
-	FallbackResource /paheko/www/_route.php
+ 	RewriteBase /
+	FallbackResource /www/_route.php
 
 	## Ne pas modifier les lignes suivantes, les décommenter simplement !
 	RewriteCond %{REQUEST_URI} !www/

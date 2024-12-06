@@ -102,6 +102,8 @@ nav.breadcrumbs ul {
 	text-align: center;
 	text-decoration: none !important;
 	font-weight: normal;
+	padding: 0.6em 0 0.4em 0;
+	display: block;
 }
 
 #menu h3 span[data-icon]::before {
@@ -110,12 +112,13 @@ nav.breadcrumbs ul {
 	position: relative;
 	right: 0;
 	margin: 0;
-	padding: 10pt 0;
+	padding: 8pt 0;
 	line-height: 10pt;
-	color: rgb(var(--gBgColor));
+	/* color: rgb(var(--gBgColor)); */
 	font-size: 20pt;
 	top: 0;
 	text-shadow: none;
+	left: 0;
 }
 
 #menu li.current_parent h3 a, #menu li.current h3 a {
@@ -133,7 +136,7 @@ nav.breadcrumbs ul {
 	flex-wrap: wrap;
 	justify-content: center;
 	position: absolute;
-	bottom: 30pt;
+	bottom: 54pt;
 	left: 0;
 	right: 0;
 	background: rgb(var(--gSecondColor));
@@ -161,7 +164,7 @@ nav.breadcrumbs ul {
 
 main {
 	margin: 0;
-	padding: .1em;
+	padding: 1em;
 }
 
 nav.tabs ul {
@@ -403,5 +406,9 @@ table.files.gallery tbody {
 		left: 0;
 		right: 0;
 		width: 95%;
+	}
+
+	.menu ul li:has(a[accessKey="W"]) {
+		display: none;
 	}
 }

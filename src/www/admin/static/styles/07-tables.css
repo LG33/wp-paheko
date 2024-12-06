@@ -61,7 +61,7 @@ table.multi tr {
 }
 
 table.list tbody tr.checked {
-    color: #633 !important;
+    color: rgb(var(--gHoverLinkColor)) !important;
     background: #ffc !important;
 }
 
@@ -149,7 +149,7 @@ table.list .userOrder td, table.list .userOrder th {
 }
 
 table.list .userOrder .check {
-    padding-left: .5em;
+    /* padding-left: .5em; */
 }
 
 .userOrder [data-icon]::before {
@@ -385,5 +385,6 @@ table.schema caption {
 }
 
 table.list th a {
-    text-decoration: none;
+    /* text-decoration: none; */
+    font-weight: bold;
 }

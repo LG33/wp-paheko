@@ -683,46 +683,41 @@ class Emails
 			return $signal->getOut('sent') ?? true;
 		}
 
-		if (SMTP_HOST) {
-			static $smtp = null;
+		static $smtp = null;
 
-			// Re-use SMTP connection in queues
-			if (null === $smtp) {
+		// Re-use SMTP connection in queues
+		if (null === $smtp) {
+			if (SMTP_HOST) {
 				$const = '\KD2\SMTP::' . strtoupper(SMTP_SECURITY);
 				$secure = constant($const);
 
 				$smtp = new SMTP(SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, $secure, SMTP_HELO_HOSTNAME);
-			}
+			} else if (file_exists(ABSPATH . 'wp-content/plugins/fluent-smtp/app/Functions/helpers.php')) {
+				require_once ABSPATH . 'wp-content/plugins/fluent-smtp/app/Functions/helpers.php';
 
-			try {
-				$return = $smtp->send($message);
-				// TODO: store return message from SMTP server
-			}
-			catch (SMTP_Exception $e) {
-				// Handle invalid recipients addresses
-				if ($r = $e->getRecipient()) {
-					if ($e->getCode() >= 500) {
-						self::handleManualBounce($r, 'hard', $e->getMessage());
-						// Don't retry delivering this email
-						return true;
-					}
-					elseif ($e->getCode() === SMTP::GREYLISTING_CODE) {
-						// Resend later (FIXME: only retry for X times)
-						return false;
-					}
-					elseif ($e->getCode() >= 400) {
-						self::handleManualBounce($r, 'soft', $e->getMessage());
-						return true;
+				$settings = fluentMailGetSettings();
+				
+				if (is_array($settings) && count($settings['connections']) > 0) {
+					$smtpSettings = array_reduce($settings['connections'], static function ($carry, $item) {
+						return $carry ?? ($item['provider_settings']['provider'] === 'smtp' ? $item['provider_settings'] : $carry);
+					}, null);
+
+					if (is_array($smtpSettings)) {
+						$smtp = new SMTP(
+							$smtpSettings['host'],
+							$smtpSettings['port'],
+							$smtpSettings['username'],
+							$smtpSettings['password'],
+							$smtpSettings['encryption'],
+							$smtpSettings['host']
+						);
 					}
 				}
-
-				throw $e;
 			}
+		}
 
-			if (!$in_queue) {
-				$smtp->disconnect();
-				$smtp = null;
-			}
+		if ($smtp) {
+			$smtp->send($message);
 		}
 		else {
 			$message->send();

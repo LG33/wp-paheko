@@ -1,7 +1,17 @@
+{literal}
+<style type="text/css">
+.header .top h1 {
+	text-align: center;
+    text-indent: 1.7em;
+}
+</style>
+{/literal}
+
 {include file="_head.tpl" title="Bonjour %s !"|args:$logged_user->name() current="home"}
 
 {$banner|raw}
 
+{*
 <nav class="tabs">
 	<aside>
 		{button id="homescreen-btn" label="Installer comme application sur l'écran d'accueil" class="hidden" shape="plus"}
@@ -37,6 +47,7 @@
 	</p>
 	{/if}
 </aside>
+*}
 
 {if !$has_extensions && $session->canAccess($session::SECTION_CONFIG, $session::ACCESS_ADMIN)}
 <div class="expose-extensions block">

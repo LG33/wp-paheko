@@ -11,11 +11,11 @@
     --gLightBorderColor: #ccc;
     --gLightBackgroundColor: #eee;
     --gLinkColor: blue;
-    --gHoverLinkColor: 127, 0, 0;
+    --gHoverLinkColor: 192 95 0;
 
     --gMainColor: 32, 120, 122;
     --gSecondColor: 133, 185, 186;
-    --gBgImage: url("../bg.png");
+    --gBgImage: url("bg.png");
 }
 
 /* Dark colors */
@@ -42,13 +42,13 @@ html {
 body {
     font-size: 100%;
     color: rgb(var(--gTextColor));
-    font-family: "Trebuchet MS", Arial, Helvetica, sans-serif;
-    background: rgb(var(--gBgColor)) var(--gBgImage) no-repeat 0px 0px fixed;
+    font-family: Gill Sans, "Trebuchet MS", Arial, Helvetica, sans-serif;
+    padding-bottom: 1em;
+    /* background: rgb(var(--gBgColor)) var(--gBgImage) no-repeat 0px 0px fixed; */
 }
 
 main {
-    margin-left: 170px;
-    padding: .2em 1em 1em 1em;
+    margin: 0px 1em 1em 190px;
     position: relative;
 }
 
@@ -57,7 +57,8 @@ main img {
 }
 
 a {
-    color: var(--gLinkColor);
+    color: rgb(var(--gMainColor));
+    transition: color .2s;
 }
 
 a:hover {
@@ -106,6 +107,7 @@ main h1.main {
 #menu .logo {
     padding: 0;
     min-height: 100px;
+    margin-bottom: 0.4em;
 }
 
 #menu .logo img {
@@ -126,10 +128,10 @@ main h1.main {
     overflow: hidden;
     overflow-y: auto;
     z-index: 1000;
-    width: 170px;
+    width: 180px;
     top: 0;
     bottom: 0;
-    background: rgb(var(--gMainColor)) var(--gBgImage) no-repeat 0px 0px;
+    /* background: rgb(var(--gMainColor)) var(--gBgImage) no-repeat 0px 0px; */
 }
 
 #menu::-webkit-scrollbar {
@@ -149,49 +151,69 @@ main h1.main {
 }
 
 #menu a {
-    color: #fff;
-    color: rgb(var(--gBgColor));
-    font-weight: bold;
-    padding: 0.4em 0.4em 0.4em 1em;
-    display: block;
+    /* color: #fff; */
+    color: rgb(var(--gTextColor));
     text-decoration: none;
     transition: background .3s;
+    border-top-right-radius: 1.2em;
+    border-bottom-right-radius: 1.2em;
 }
 
 #menu a:hover {
-    text-decoration: underline;
     background: rgba(var(--gSecondColor), 0.5);
 }
 
 #menu li li a {
-    font-size: 0.8em;
-    padding-left: 2em;
+    font-size: 0.85em;
+    padding-left: 3.5em;
+    margin-top: 0.2em;
+    padding: 0.3em 1em 0.3em 2.8em;
+    display: block;
 }
 
 #menu li.current h3 a, #menu ul ul li.current a {
-    background: rgb(var(--gBgColor));
-    color: rgb(var(--gMainColor));
+    background: rgb(var(--gMainColor));
+    color: rgb(var(--gBgColor));
 }
 
 #menu h3 a {
     position: relative;
+    background-color: rgba(var(--gMainColor), 0.1);
+    margin-top: 0.4em;
+    display: inline-block;
+    padding: 0.5em 1.5em 0.5em 2.8em;
 }
 
 #menu h3 span[data-icon]::before {
     position: absolute;
-    right: .4rem;
+    left: 0.6rem;
     display: block;
     text-decoration: none;
     text-shadow: none;
     margin: 0;
-    top: .4rem;
-    font-size: 20pt;
-    color: rgba(var(--gBgColor), .5);
+    top: .55rem;
+    font-size: 16pt;
+    color: rgb(var(--gMainColor));
     font-weight: normal;
+    width: 1.5rem;
+    text-align: center;
 }
 
 #menu li.current h3 span[data-icon]::before {
-    color: rgba(var(--gMainColor));
+    color: rgb(var(--gBgColor));
+}
+
+#top {
+    display: flex;
+    align-items: center;
+}
+
+#top h1 {
+    flex: 1;
+}
+
+#top .menu-btn .btn {
+    margin-right: 1em;
 }
 
 body.public, body.raw {

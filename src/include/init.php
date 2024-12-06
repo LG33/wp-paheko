@@ -120,23 +120,7 @@ if (!defined('Paheko\DATA_ROOT')) {
 }
 
 if (!defined('Paheko\WWW_URI')) {
-	try {
-		$uri = \KD2\HTTP::getRootURI(ROOT);
-	}
-	catch (\UnexpectedValueException $e) {
-		$uri = null;
-	}
-
-	if ($uri == '/www/') {
-		$uri = '/';
-	}
-	elseif ($uri !== null) {
-		readfile(ROOT . '/sous-domaine.html');
-		exit;
-	}
-
-	define('Paheko\WWW_URI', $uri);
-	unset($uri);
+	define('Paheko\WWW_URI', '/');
 }
 
 $host = null;

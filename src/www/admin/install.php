@@ -1,8 +1,11 @@
 <?php
 namespace Paheko;
 
+use KD2\HTTP;
 use Paheko\Users\Session;
 use Paheko\Entities\Accounting\Chart;
+use Paheko\Plugins;
+use Paheko\Extensions;
 
 const SKIP_STARTUP_CHECK = true;
 
@@ -41,7 +44,21 @@ $csrf_key = 'install';
 
 $form->runIf('save', function () {
 	Install::installFromForm();
-	Session::getInstance()->forceLogin(1);
+	//Session::getInstance()->forceLogin(1);
+	
+	$default_plugins = ['helloasso_checkout', 'caisse', 'usermap'];
+
+	foreach ($default_plugins as $key => $plugin) {
+		if (Plugins::exists($plugin) && Plugins::isAllowed($plugin)) {
+			Extensions::toggle($plugin, true);
+		}
+	}
+
+	$default_modules = ['expenses_claims', 'receipt', 'receipt_donation', 'recus_fiscaux', 'transactions_templates'];
+
+	foreach ($default_modules as $key => $module) {
+		Extensions::toggle($module, true);
+	}
 }, $csrf_key, ADMIN_URL);
 
 $tpl->assign('countries', Chart::COUNTRY_LIST);

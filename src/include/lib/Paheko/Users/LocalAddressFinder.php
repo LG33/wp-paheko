@@ -78,7 +78,7 @@ class LocalAddressFinder
 
 		$out = [];
 
-		while ($row = $result->fetchArray(\SQLITE3_ASSOC)) {
+		while ($row = $result->fetchAll(\PDO::FETCH_ASSOC)) {
 			unset($row['numbers'], $row['rank']);
 			$row['address'] = $number . $row['street'];
 			$row['label'] = $row['address'] . ', ' . $row['code'] . ' ' . $row['city'];

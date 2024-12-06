@@ -34,7 +34,7 @@ span.alert, b.alert {
     border: 1px solid var(--gLightBorderColor);
     padding: .5em;
     margin: .5em 0;
-    border-radius: .3em;
+    border-radius: 1em;
     padding-left: 3em;
     position: relative;
     clear: both;
@@ -71,7 +71,7 @@ span.alert, b.alert {
 }
 
 .confirm.block a.icn-btn, .alert.block a.icn-btn, .error.block a.icn-btn {
-    color: #000;
+    /* color: #000; */
 }
 
 .confirm.block::before, .alert.block::before, .error.block::before, .help.block::before {
@@ -80,7 +80,7 @@ span.alert, b.alert {
     top: .2em;
     position: absolute;
     font-size: 1.5em;
-    text-shadow: 2px 2px 5px var(--gLightBorderColor);
+    /* text-shadow: 2px 2px 5px var(--gLightBorderColor); */
 }
 
 .confirm.block::before {
@@ -109,10 +109,6 @@ span.alert, b.alert {
 
 .help a {
     color: var(--gBorderColor);
-}
-
-.help a span {
-    text-decoration: underline;
 }
 
 
