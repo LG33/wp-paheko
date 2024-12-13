@@ -152,7 +152,6 @@ nav.home ul {
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
-    justify-content: center;
 }
 
 nav.home ul li {

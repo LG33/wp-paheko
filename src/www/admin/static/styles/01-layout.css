@@ -102,6 +102,7 @@ footer.public a {
 main h1.main {
     color: rgb(var(--gMainColor));
     margin-bottom: 0.4em;
+    margin-top: 0.2em;
 }
 
 #menu .logo {
@@ -159,7 +160,7 @@ main h1.main {
     border-bottom-right-radius: 1.2em;
 }
 
-#menu a:hover {
+#menu :not(.logo) a:hover {
     background: rgba(var(--gSecondColor), 0.5);
 }
 
@@ -200,6 +201,16 @@ main h1.main {
 }
 
 #menu li.current h3 span[data-icon]::before {
+    color: rgb(var(--gBgColor));
+}
+
+#user-btn {
+    position: absolute;
+    top: 0.4em;
+    right: 0.7em;
+}
+
+#user-btn a {
     color: rgb(var(--gBgColor));
 }
 

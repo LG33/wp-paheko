@@ -13,7 +13,7 @@
 	<legend>Informations sur l'association</legend>
 	<dl>
 		{input type="select" required=true label="Pays (pour la comptabilité)" options=$countries default="FR" help="Ce choix permet de configurer les règles comptables en fonction du pays. Il sera possible de choisir plus tard un autre pays dans la configuration." name="country"}
-		{input type="text" label="Nom de l'association" required=true name="name"}
+		{input type="text" label="Nom de l'association" required=true name="name" default=$name autocomplete="organization"}
 	</dl>
 </fieldset>
 
@@ -21,10 +21,10 @@
 	<fieldset>
 		<legend>Création du compte administrateur</legend>
 		<dl>
-			{input type="text" label="Nom et prénom" required=true name="user_name"}
-			{input type="email" label="Adresse E-Mail" required=true name="user_email"}
+			{input type="text" label="Nom et prénom" required=true name="user_name" default=$user_name autocomplete="name"}
+			{* input type="email" label="Adresse E-Mail" required=true name="user_email" *}
 		</dl>
-		{include file="users/_password_form.tpl" field="password" required=true}
+		{* include file="users/_password_form.tpl" field="password" required=true *}
 	</fieldset>
 {/if}
 

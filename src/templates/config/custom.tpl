@@ -13,6 +13,7 @@
 <fieldset>
 	<legend>Association et site web</legend>
 	<dl>
+		{*
 		<dt>Logo</dt>
 		{if $url = $config->fileURL('logo', '150px')}
 		<dd>
@@ -53,6 +54,7 @@
 		<dd class="help">
 			Cette image sera utilisée comme icône de l'application mobile (à installer depuis {link href="!" label="la page d'accueil"} et le bouton «&nbsp;Installer comme application sur l'écran d'accueil&nbsp;»).
 		</dd>
+		*}
 		<dt>Signature ou tampon de l'association</dt>
 		{if $url = $config->fileURL('signature', '150px')}
 		<dd>

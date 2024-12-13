@@ -83,10 +83,11 @@ function wp_paheko_init( $plugin ) {
 			return die(var_dump($arg));
 		}
 	}
-
-	require_once  ABSPATH . '/wp-config.php';
+	
+	require_once ABSPATH . 'wp-config.php';
 	
 	$uri = explode('?', $_SERVER['REQUEST_URI'])[0];
+	
 	if (strpos($uri, '/p/') === 0 || strpos($uri, '/m/') === 0 || strpos($uri, '/admin/p/') === 0 || strpos($uri, '/admin/m/') === 0) {
 		require_once __DIR__ . '/www/_route.php';
 		exit();
@@ -95,8 +96,19 @@ function wp_paheko_init( $plugin ) {
 		$explode = explode('.', $uri);
 		if (count($explode) > 1) {
 			if (strpos($explode[1], 'php') === false) {
-				//require_once __DIR__ . '/www/admin/_inc.php';
-				wp_redirect('/wp-content/plugins/' . basename(__DIR__) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'], 301);
+				if(str_contains($uri, 'favicon.png')) $redirect = get_site_icon_url(32);
+				else if(str_contains($uri, 'icon.png') || str_contains($uri, 'logo.png')) {
+					if(get_theme_mod( 'custom_logo' )) {
+						$logos = wp_get_attachment_image_src( get_theme_mod( 'custom_logo' ), [150, 150] );
+						if(!empty($logos)) $redirect = $logos[0];
+						else $redirect = get_site_icon_url(32);
+					}
+					else $redirect = get_site_icon_url(32);
+				}
+				else $redirect = '/wp-content/plugins/' . basename(__DIR__) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'];
+
+				wp_redirect($redirect, 301);
+				die();
 			}
 		}
 		else {

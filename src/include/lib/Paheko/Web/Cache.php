@@ -111,7 +111,7 @@ class Cache
 		$cache_root = Utils::dirname(WEB_CACHE_ROOT);
 
 		// Create symlink for self-hosting with .htaccess
-		if (!file_exists(ROOT . '/www/.cache') && file_exists($cache_root) && is_writable(ROOT . '/www')) {
+		if (function_exists('symlink') && !file_exists(ROOT . '/www/.cache') && file_exists($cache_root) && is_writable(ROOT . '/www')) {
 			@symlink($cache_root, ROOT . '/www/.cache');
 		}
 

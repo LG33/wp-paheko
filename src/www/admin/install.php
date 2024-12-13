@@ -42,9 +42,14 @@ $form = new Form;
 $tpl->assign_by_ref('form', $form);
 $csrf_key = 'install';
 
-$form->runIf('save', function () {
+require_once ABSPATH . '/wp-load.php';
+$wp_user = wp_get_current_user();
+
+$form->runIf('save', function () use ($wp_user) {
+	$_POST['user_email'] = $wp_user->user_email;
+	$_POST['password'] = $_POST['password_confirmed'] = Utils::suggestPassword();
+
 	Install::installFromForm();
-	//Session::getInstance()->forceLogin(1);
 	
 	$default_plugins = ['helloasso_checkout', 'caisse', 'usermap'];
 
@@ -54,12 +59,15 @@ $form->runIf('save', function () {
 		}
 	}
 
-	$default_modules = ['expenses_claims', 'receipt', 'receipt_donation', 'recus_fiscaux', 'transactions_templates'];
+	$default_modules = ['helloasso_checkout_snippets', 'expenses_claims', 'receipt', 'receipt_donation', 'recus_fiscaux', 'transactions_templates'];
 
 	foreach ($default_modules as $key => $module) {
 		Extensions::toggle($module, true);
 	}
 }, $csrf_key, ADMIN_URL);
+
+$tpl->assign('name', htmlspecialchars_decode(get_option('blogname')));
+$tpl->assign('user_name', $wp_user->display_name);
 
 $tpl->assign('countries', Chart::COUNTRY_LIST);
 $tpl->assign('require_admin_account', !is_array(LOCAL_LOGIN));

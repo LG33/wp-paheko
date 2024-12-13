@@ -80,7 +80,7 @@ verify:
 	@echo "Verifying KD2fw..."
 	@cd ${ROOT}/include/lib/KD2 && bash ${ROOT}/../tools/fossil_verify.sh ${KD2FW_BRANCH} ${KD2FW_URL} src/lib/KD2
 
-release: test-syntax doc minify freeze
+release: minify
 	$(eval VERSION=$(shell cat VERSION))
 	$(eval KD2FW_VERSION=$(shell cat ../build/kd2fw.version))
 	$(eval MODULES_VERSION=$(shell cat ../build/modules.version))
@@ -88,44 +88,54 @@ release: test-syntax doc minify freeze
 
 	rm -rf /tmp/paheko-build
 	mkdir -p /tmp/paheko-build
-	fossil zip ${VERSION} /tmp/paheko-build/src.zip --name paheko
-	unzip -d /tmp/paheko-build /tmp/paheko-build/src.zip
+	zip -r /tmp/paheko-build/src.zip *
+	unzip -d /tmp/paheko-build/src /tmp/paheko-build/src.zip
 
 	# Download and package required KD2fw libraries
 	cd /tmp/paheko-build && \
 		wget ${KD2FW_URL}zip/${KD2FW_VERSION}/kd2.zip && \
 		unzip kd2.zip && \
-		cd paheko/src/include/lib && \
-		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/paheko/src/include/lib/
+		cd src/include/lib && \
+		mkdir /tmp/paheko-build/kd2/src/lib/Wasso && \
+		cp Wasso/DB.php /tmp/paheko-build/kd2/src/lib/Wasso/DB.php && \
+		cp Wasso/PDO_DB.php /tmp/paheko-build/kd2/src/lib/Wasso/PDO_DB.php && \
+		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/src/include/lib/
 
 	# Overwrite admin.css with united file
-	mv www/admin/static/mini.css /tmp/paheko-build/paheko/src/www/admin/static/admin.css
+	mv www/admin/static/mini.css /tmp/paheko-build/src/www/admin/static/admin.css
 
 	# Generate .htaccess file
-	cd /tmp/paheko-build/paheko/src && make htaccess
+	#cd /tmp/paheko-build/src && make htaccess
 
 	# Remove useless files
-	cd /tmp/paheko-build/paheko/src/www/admin/static; \
+	cd /tmp/paheko-build/src/www/admin/static; \
 		rm -f font/*.css font/*.json
-	cd /tmp/paheko-build/paheko/src; \
-		rm -f Makefile include/lib/KD2/data/countries.en.json
+	cd /tmp/paheko-build/src; \
+		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal
+		rm -r uploads data/cache
 
 	# Download modules and only keep the stable ones
-	cd /tmp/paheko-build/paheko/src && \
+	cd /tmp/paheko-build/src && \
 		wget ${MODULES_URL}zip/${MODULES_VERSION}/modules.zip && \
 		unzip -o modules.zip && \
 		rm -rf `find modules/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f modules.zip
+	cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/src/modules
 
 	# Download plugins and only keep the stable ones
-	cd /tmp/paheko-build/paheko/src/data && \
+	cd /tmp/paheko-build/src/data && \
 		wget ${PLUGINS_URL}zip/${PLUGINS_VERSION}/plugins.zip && \
 		unzip -o plugins.zip && \
 		rm -rf `find plugins/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f plugins.zip
+	cp -r data/plugins/helloasso_checkout /tmp/paheko-build/src/data/plugins
 
-	mv /tmp/paheko-build/paheko/src /tmp/paheko-build/paheko-${VERSION}
-	tar czvfh ../build/paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build paheko-${VERSION}
+	chown -R www-data /tmp/paheko-build/src
+
+	mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko
+	tar czvfh ../build/wp-paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build wp-paheko
+	#cd ../build
+	#zip -r -b /tmp/paheko-build/wp-paheko wp-paheko.zip *
 
 deb:
 	cd ../build/debian; ./makedeb.sh

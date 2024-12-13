@@ -144,13 +144,13 @@ if (ALERT_MESSAGE && !$dialog) {
 		{if !defined('Paheko\LOCAL_LOGIN') || !LOCAL_LOGIN}
 			<li><h3><a href="{$admin_uri}logout.php">{icon shape="logout"}<b>Déconnexion</b></a></h3></li>
 		{/if}
+		*}
 
 		{if $help_url}
 		<li>
 			<h3><a href="{$help_url}" target="_dialog" accesskey="?">{icon shape="help"}<b>Aide</b></a></h3>
 		</li>
 		{/if}
-		*}
 
 	{elseif !defined('Paheko\SKIP_STARTUP_CHECK')}
 		{if $config.org_web || !$config.site_disabled}
@@ -160,9 +160,9 @@ if (ALERT_MESSAGE && !$dialog) {
 	{/if}
 	</ul>
 </nav>
-
-<div class="top">
-	{if $logged_user && $logged_user->exists()}
+	
+{if $logged_user && $logged_user->exists()}
+<div id="user-btn">
 	{linkmenu label="" shape="user" right=true}
 		<h3>{$logged_user->name()}</h3>
 		<p class="help">{$logged_user.email}</p>
@@ -175,8 +175,9 @@ if (ALERT_MESSAGE && !$dialog) {
 		{linkbutton label="Me déconnecter" href="!logout.php"}
 		{/if}
 	{/linkmenu}
-	{/if}
 </div>
+{/if}
+
 </header>
 {elseif $layout === 'public'}
 <header class="public">
