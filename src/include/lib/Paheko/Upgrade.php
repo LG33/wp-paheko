@@ -18,33 +18,7 @@ class Upgrade
 
 	static public function preCheck(): bool
 	{
-		if (!file_exists(DB_FILE)) {
-			return false;
-		}
-
-		$v = DB::getInstance()->version();
-
-		if (version_compare($v, paheko_version(), '>='))
-		{
-			return false;
-		}
-
-		Install::checkAndCreateDirectories();
-
-		if (!$v || version_compare($v, self::MIN_REQUIRED_VERSION, '<'))
-		{
-			throw new UserException(sprintf("Votre version de Paheko est trop ancienne pour être mise à jour. Mettez à jour vers Paheko %s avant de faire la mise à jour vers cette version.", self::MIN_REQUIRED_VERSION));
-		}
-
-		if (Static_Cache::exists('upgrade'))
-		{
-			$path = Static_Cache::getPath('upgrade');
-			throw new UserException('Une mise à jour est déjà en cours.'
-				. PHP_EOL . 'Si celle-ci a échouée et que vous voulez ré-essayer, supprimez le fichier suivant:'
-				. PHP_EOL . $path);
-		}
-
-		return true;
+		return false;
 	}
 
 	static public function upgrade()
