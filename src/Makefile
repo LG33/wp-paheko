@@ -111,7 +111,7 @@ release: minify
 	cd /tmp/paheko-build/src/www/admin/static; \
 		rm -f font/*.css font/*.json
 	cd /tmp/paheko-build/src; \
-		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal
+		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal *.asc
 		rm -r uploads data/cache
 
 	# Download modules and only keep the stable ones
@@ -130,6 +130,7 @@ release: minify
 		rm -f plugins.zip
 	cp -r data/plugins/helloasso_checkout /tmp/paheko-build/src/data/plugins
 
+	cp ../README.md /tmp/paheko-build/src/readme.txt
 	chown -R www-data /tmp/paheko-build/src
 
 	mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko

@@ -8,21 +8,20 @@
  * registers the activation and deactivation functions, and defines a function
  * that starts the plugin.
  *
- * @link              https://lgaillard.fr
+ * @link              https://paheko.cloud
  * @since             1.0.0
  * @package           WP-Paheko
  *
  * @wordpress-plugin
- * Plugin Name:       WP-Paheko
+ * Plugin Name:       Paheko pour Wordpress
  * Plugin URI:        https://paheko.cloud
- * Description:       This is a description of the plugin.
+ * Description:       Ajoutez Paheko (logiciel libre de gestion et de comptabilité associative) directement à votre Wordpress !
  * Version:           1.0.0
  * Author:            Louis Gaillard
  * Author URI:        https://lgaillard.fr/
- * License:           GPL-2.0+
- * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
+ * License:           AGPL-3.0-or-later
+ * License URI:       https://www.gnu.org/licenses/agpl-3.0.html
  * Text Domain:       wp-paheko
- * Domain Path:       /languages
  */
 
 // If this file is called directly, abort.
@@ -37,28 +36,6 @@ if (!defined('WPINC')) {
  */
 define('WP_PAHEKO_VERSION', '1.0.0');
 
-/**
- * The code that runs during plugin activation.
- * This action is documented in includes/class-wp-paheko-activator.php
- */
-function activate_wp_paheko()
-{
-	add_rewrite_rule('((m|p|admin\/p)\/?.*)$', 'wp-content/plugins/' . basename(__DIR__) . '/www/_route.php/$1', 'top');
-	add_rewrite_rule('(admin\/?.*)$', 'wp-content/plugins/' . basename(__DIR__) . '/www/$1', 'top');
-	flush_rewrite_rules();
-}
-//register_activation_hook( __FILE__, 'activate_wp_paheko' );
-
-/**
- * The code that runs during plugin deactivation.
- * This action is documented in includes/class-wp-paheko-deactivator.php
- */
-function deactivate_wp_paheko()
-{
-	flush_rewrite_rules();
-}
-//register_deactivation_hook( __FILE__, 'deactivate_wp_paheko' );
-
 function wp_paheko_activation_redirect($plugin)
 {
 	if ($plugin == plugin_basename(__FILE__)) {
@@ -70,8 +47,8 @@ add_action('activated_plugin', 'wp_paheko_activation_redirect');
 function wp_paheko_add_menu_page()
 {
 	add_menu_page(
-		esc_html__('Retourner dans Wasso', 'return-to-wasso'),
-		esc_html__('Retourner dans Wasso', 'return-to-wasso'),
+		esc_html__('Retourner dans Wasso', 'wp-paheko'),
+		esc_html__('Retourner dans Wasso', 'wp-paheko'),
 		'manage_options',
 		__DIR__ . '/www/index.php',
 		null, // callback
