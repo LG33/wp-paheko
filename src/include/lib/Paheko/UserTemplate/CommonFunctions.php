@@ -708,7 +708,7 @@ class CommonFunctions
 		elseif ($context === 'user_edit' && $field->user_access_level === Session::ACCESS_NONE) {
 			return '';
 		}
-		elseif ($context === 'user_edit' && $field->user_access_level === Session::ACCESS_READ) {
+		elseif ($context === 'user_edit' && $field->user_access_level === Session::ACCESS_READ && isset($params['user'])) {
 			$v = self::user_field(['name' => $name, 'value' => $params['user']->$name]);
 			return sprintf('<dt>%s</dt><dd>%s</dd>', htmlspecialchars($field->label), $v ?: '<em>Non renseigné</em>');
 		}

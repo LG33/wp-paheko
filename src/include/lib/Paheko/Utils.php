@@ -546,6 +546,12 @@ class Utils
 		$destination ??= '';
 		$destination = self::getLocalURL($destination);
 
+		if (str_contains($destination, '/login.php')) {
+			$from = Utils::getRequestURI();
+			if (str_contains($from, '/logout.php')) $from = '/admin';
+			$destination = '/wp-login.php?redirect_to=' . $from;
+		}
+
 		if (isset($_GET['_dialog'])) {
 			$destination .= (strpos($destination, '?') === false ? '?' : '&') . '_dialog';
 

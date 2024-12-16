@@ -73,13 +73,13 @@ nav.breadcrumbs ul {
 	display: none;
 }
 
-#menu *, #menu a {
+/*#menu *, #menu a {
 	margin: 0;
 	padding: 0;
-}
+}*/
 
 #menu > ul {
-	background: rgb(var(--gMainColor));
+	background: rgb(var(--gBgColor));
 	flex-wrap: nowrap;
 	grid-template: none / repeat(auto-fit, minmax(20px, 1fr));
 	display: grid;
@@ -91,7 +91,9 @@ nav.breadcrumbs ul {
 }
 
 #menu > ul > li > h3 a b {
-	display: none;
+	display: block;
+	font-weight: normal;
+	padding-bottom: 0.5em;
 }
 
 #menu > ul > li > ul {
@@ -104,6 +106,7 @@ nav.breadcrumbs ul {
 	font-weight: normal;
 	padding: 0.6em 0 0.4em 0;
 	display: block;
+	clip-path: circle(3.3em);
 }
 
 #menu h3 span[data-icon]::before {
@@ -122,14 +125,14 @@ nav.breadcrumbs ul {
 }
 
 #menu li.current_parent h3 a, #menu li.current h3 a {
-	background: rgb(var(--gSecondColor));
+	background: rgb(var(--gMainColor));
 }
 
-#menu li.current h3 span[data-icon]::before,
+/*#menu li.current h3 span[data-icon]::before,
 #menu > ul > li.current_parent h3 span[data-icon]::before {
 	color: rgb(var(--gBgColor));
 	text-shadow: 0px 0px 5px rgb(var(--gTextColor)), 0px 0px 5px rgb(var(--gTextColor));
-}
+}*/
 
 #menu > ul > li.current > ul, #menu > ul > li.current_parent > ul {
 	display: flex;
@@ -160,6 +163,15 @@ nav.breadcrumbs ul {
 #menu > ul > li > ul li.current a {
 	background: rgb(var(--gMainColor));
 	color: rgb(var(--gBgColor));
+}
+
+#user-btn {
+    top: 1em;
+    right: 1em;
+}
+
+#user-btn .menu-btn b {
+    padding: 0.9em;
 }
 
 main {
@@ -408,7 +420,7 @@ table.files.gallery tbody {
 		width: 95%;
 	}
 
-	.menu ul li:has(a[accessKey="W"]) {
+	#menu ul li:has(a[accessKey="W"]), #menu ul li:has(a[accessKey="?"]) {
 		display: none;
 	}
 }

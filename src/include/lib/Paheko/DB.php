@@ -269,22 +269,22 @@ class DB extends PDO_DB
 			));
 		}
 
-		self::registerCustomFunctions($this);
+		self::registerCustomFunctions($this->db);
 	}
 
 	static public function registerCustomFunctions($db)
 	{
-		$db->createFunction('dirname', [Utils::class, 'dirname']);
-		$db->createFunction('basename', [Utils::class, 'basename']);
-		$db->createFunction('unicode_like', [self::class, 'unicodeLike']);
-		$db->createFunction('transliterate_to_ascii', [Utils::class, 'unicodeTransliterate']);
-		$db->createFunction('email_hash', [Email::class, 'getHash']);
-		$db->createFunction('md5', 'md5');
-		$db->createFunction('uuid', [Utils::class, 'uuid']);
-		$db->createFunction('random_string', [Utils::class, 'random_string']);
-		$db->createFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
+		$db->sqliteCreateFunction('dirname', [Utils::class, 'dirname']);
+		$db->sqliteCreateFunction('basename', [Utils::class, 'basename']);
+		$db->sqliteCreateFunction('unicode_like', [self::class, 'unicodeLike']);
+		$db->sqliteCreateFunction('transliterate_to_ascii', [Utils::class, 'unicodeTransliterate']);
+		$db->sqliteCreateFunction('email_hash', [Email::class, 'getHash']);
+		$db->sqliteCreateFunction('md5', 'md5');
+		$db->sqliteCreateFunction('uuid', [Utils::class, 'uuid']);
+		$db->sqliteCreateFunction('random_string', [Utils::class, 'random_string']);
+		$db->sqliteCreateFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
 
-		$db->createFunction('print_dynamic_field', function($name, $value) {
+		$db->sqliteCreateFunction('print_dynamic_field', function($name, $value) {
 			$field = DynamicFields::get($name);
 
 			if (!$field) {
@@ -294,7 +294,7 @@ class DB extends PDO_DB
 			return $field->getStringValue($value);
 		});
 
-		$db->createFunction('match_dynamic_field', function($name, $value, ...$match) {
+		$db->sqliteCreateFunction('match_dynamic_field', function($name, $value, ...$match) {
 			if (empty($value)) {
 				return null;
 			}
@@ -342,18 +342,18 @@ class DB extends PDO_DB
 			return $match === $value;
 		});
 
-		$db->createCollation('U_NOCASE', [Utils::class, 'unicodeCaseComparison']);
+		$db->sqliteCreateCollation('U_NOCASE', [Utils::class, 'unicodeCaseComparison']);
 	}
 
 	public function toggleUnicodeLike(bool $enable): void
 	{
 		if ($enable) {
-			$this->createFunction('like', [$this, 'unicodeLike']);
+			$this->db->sqliteCreateFunction('like', [$this, 'unicodeLike']);
 		}
 		else {
 			// We should revert LIKE to the default, but we can't currently (FIXME?)
 			// see https://github.com/php/php-src/issues/10726
-			//$db->createFunction('like', null);
+			//$db->sqliteCreateFunction('like', null);
 		}
 	}
 

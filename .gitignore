@@ -1,7 +1,6 @@
-src/data/plugins/*
-src/data/cache/*
-src/data/*.sqlite
-src/data/*.sqlite-journal
-src/data/*.log
-src/include/lib/KD2/*
-src/modules/*
+src/data
+src/include/lib/KD2
+src/include/data
+src/include/dependencies.list
+src/modules
+build

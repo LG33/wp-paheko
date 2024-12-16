@@ -231,15 +231,24 @@ class Session extends \KD2\UserSession
 
 	public function isLogged(bool $allow_new_session = true)
 	{
-		if (is_array(LOCAL_LOGIN)) {
-			$logged = false;
-		}
-		else {
-			$logged = parent::isLogged();
-		}
+		$logged = false;
 
-		if (!$logged && LOCAL_LOGIN) {
+		if (LOCAL_LOGIN) {
 			$logged = $this->forceLogin(LOCAL_LOGIN, $allow_new_session);
+		}
+		
+		if (!$logged && $allow_new_session) {
+			require_once ABSPATH . '/wp-load.php';
+
+			$wp_user = wp_get_current_user();
+			$wp_email = $wp_user->user_email;
+
+			$db = DB::getInstance();
+			$paheko_user_id = $db->firstColumn(sprintf('SELECT id FROM users WHERE email = "%s"', $wp_email));
+
+			if ($paheko_user_id) $this->create($paheko_user_id);
+
+			if ($this->user) $logged = true;
 		}
 
 		// Logout if data_root doesn't match, to forbid one session being used with another organization
@@ -280,6 +289,17 @@ class Session extends \KD2\UserSession
 		}
 
 		return parent::start($write);
+	}
+
+	public function close(): void
+	{
+		// Release lock so that other processes are not blocked
+		// see https://www.php.net/manual/en/function.session-start.php
+		// and https://ma.ttias.be/php-session-locking-prevent-sessions-blocking-in-requests/
+
+		if ($this->non_locking) {
+			@session_write_close();
+		}
 	}
 
 	public function forceLogin($login, bool $allow_new_session = true): bool
@@ -588,7 +608,7 @@ class Session extends \KD2\UserSession
 		}
 
 		$this->_user = Users::get($this->user);
-
+		
 		// If user does not exist anymore
 		if (!$this->_user) {
 			$this->logout();

@@ -1644,7 +1644,7 @@ class Sections
 			throw new Brindille_Exception(sprintf("à la ligne %d erreur SQL :\n%s\n\nRequête exécutée :\n%s", $line, $e->getMessage(), $sql));
 		}
 
-		while ($row = $result->fetchArray(\SQLITE3_ASSOC))
+		while ($row = $result->fetchAll(\PDO::FETCH_ASSOC))
 		{
 			if (isset($params['assign'])) {
 				$tpl::__assign(['var' => $params['assign'], 'value' => $row], $tpl, $line);

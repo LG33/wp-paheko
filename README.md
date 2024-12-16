@@ -1,3 +1,11 @@
+=== WP-Paheko ===
+
+Contributors:      lg33
+Stable tag:        1.0.0
+License:           AGPL-3.0-or-later
+License URI:       https://www.gnu.org/licenses/agpl-3.0.html
+Tags:              wordpress, paheko
+
 # Paheko - Le gestionnaire d'association
 
 Paheko est un logiciel de gestion d'association.

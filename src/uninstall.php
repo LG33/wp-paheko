@@ -39,28 +39,3 @@ if ( ! isset( $_REQUEST['plugin'] ) || $_REQUEST['plugin'] != plugin_basename( _
 if ( ! current_user_can( 'activate_plugins' ) ) {
 	exit;
 }*/
-
-function deleteDirectory($dir) {
-    if (!file_exists($dir)) {
-        return true;
-    }
-
-    if (!is_dir($dir)) {
-        return unlink($dir);
-    }
-
-    foreach (scandir($dir) as $item) {
-        if ($item == '.' || $item == '..') {
-            continue;
-        }
-
-        if (!deleteDirectory($dir . DIRECTORY_SEPARATOR . $item)) {
-            return false;
-        }
-
-    }
-
-    return rmdir($dir);
-}
-
-deleteDirectory(realpath(__DIR__).'/../../../paheko');

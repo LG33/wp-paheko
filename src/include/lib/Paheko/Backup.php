@@ -70,9 +70,9 @@ class Backup
 			$db = null;
 
 			try {
-				$db = new \SQLite3(DATA_ROOT . '/' . $file, \SQLITE3_OPEN_READONLY);
+				$db = new \PDO('sqlite:' . DATA_ROOT . '/' . $file);
 				$version = DB::getVersion($db);
-				$db->close();
+				$db = null;
 			}
 			catch (\Exception $e) {
 				$error = $db ? $db->lastErrorMsg() : $e->getMessage();
@@ -390,7 +390,7 @@ class Backup
 
 		// First try to open database
 		try {
-			$db = new \SQLite3($file, \SQLITE3_OPEN_READONLY);
+			$db = new \PDO('sqlite:' . $file);
 		}
 		catch (\Exception $e) {
 			throw new UserException('Le fichier fourni n\'est pas une base de données valide. ' .
@@ -401,7 +401,7 @@ class Backup
 
 		try {
 			// Now let's check integrity
-			$check = $db->querySingle('PRAGMA integrity_check;', false);
+			$check = $db->query('PRAGMA integrity_check;')->fetchColumn();
 		}
 		catch (\Exception $e) {
 			// SQLite can throw an error like: "file is encrypted or is not a db"
@@ -414,7 +414,7 @@ class Backup
 		}
 
 		if ($check_foreign_keys) {
-			$check = $db->querySingle('PRAGMA foreign_key_check;');
+			$check = $db->query('PRAGMA foreign_key_check;')->fetchColumn();
 
 			if ($check) {
 				throw new UserException('Le fichier fourni est corrompu. Certaines clés étrangères référencent des lignes qui n\'existent pas.');
@@ -425,7 +425,7 @@ class Backup
 		// as we allow to restore from old versions, and that would mean storing
 		// all possible old schemas. But we can still see if it looks like a schema
 		// coming from Paheko by looking for the config table.
-		$table = $db->querySingle('SELECT 1 FROM sqlite_master WHERE type=\'table\' AND tbl_name=\'config\';');
+		$table = $db->query('SELECT 1 FROM sqlite_master WHERE type=\'table\' AND tbl_name=\'config\';')->fetchColumn();
 
 		if (!$table) {
 			throw new UserException('Le fichier fourni ne semble pas contenir de données liées à Paheko.');
@@ -439,7 +439,7 @@ class Backup
 		}
 
 		// Check for AppID
-		$appid = $db->querySingle('PRAGMA application_id;', false);
+		$appid = $db->query('PRAGMA application_id;')->fetchColumn();
 
 		if ($appid !== DB::APPID) {
 			throw new UserException('Ce fichier n\'est pas une sauvegarde Paheko (application_id ne correspond pas).', self::NO_APP_ID);
@@ -450,14 +450,14 @@ class Backup
 			$sql = 'SELECT 1 FROM users_categories WHERE id = (SELECT id_category FROM users WHERE id = %d) AND perm_connect >= %d AND perm_config >= %d';
 
 			$sql = sprintf($sql, $session->getUser()->id, Session::ACCESS_READ, Session::ACCESS_ADMIN);
-			$is_still_admin = $db->querySingle($sql);
+			$is_still_admin = $db->query($sql)->fetchColumn();
 
 			if (!$is_still_admin) {
 				$return |= self::NOT_AN_ADMIN;
 			}
 		}
 
-		$db->close();
+		$db = null;
 
 		$backup = str_replace('.sqlite', date('.Y-m-d-His') . '.avant_restauration.sqlite', DB_FILE);
 
