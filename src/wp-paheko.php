@@ -50,8 +50,8 @@ function wp_paheko_add_menu_page()
 		esc_html__('Retourner dans Paheko', 'wp-paheko'),
 		esc_html__('Retourner dans Paheko', 'wp-paheko'),
 		'manage_options',
-		__DIR__ . '/www/index.php',
-		null, // callback
+		'wp-paheko',
+		fn() => require_once __DIR__ . '/www/index.php',
 		'dashicons-arrow-left-alt',
 		0
 	);
@@ -67,7 +67,7 @@ function wp_paheko_init($plugin)
 		}
 	}
 
-	require_once ABSPATH . 'wp-config.php';
+	require_once ABSPATH . 'wp-load.php';
 
 	$uri = explode('?', $_SERVER['REQUEST_URI'])[0];
 
@@ -90,7 +90,7 @@ function wp_paheko_init($plugin)
 					} else
 						$redirect = get_site_icon_url(32);
 				} else
-					$redirect = '/wp-content/plugins/' . basename(__DIR__) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'];
+					$redirect = WP_CONTENT_URL . DIRECTORY_SEPARATOR . basename(dirname(dirname(__FILE__))) . DIRECTORY_SEPARATOR . basename(__DIR__) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'];
 
 				wp_redirect($redirect, 301);
 				die();

@@ -18,7 +18,7 @@
 <a href="/wp-admin" target="_blank" data-icon="🌐" class="icn-btn"><span>Ouvrir Wordpress</span></a>
 </div>
 
-<iframe src=/wp-admin/{if $_GET.id == 'new'}post-new.php?post_type=page{else}post.php?post={$_GET.id}&action=edit{/if} frameborder="0" style="flex: 1;margin: 1em -1em 0 0;border-top: 1px solid lightgray;border-left: 1px solid lightgray;border-top-left-radius: 1em;"></iframe>
+<iframe src={$wp_admin_url}{if $_GET.id == 'new'}post-new.php?post_type=page{else}post.php?post={$_GET.id}&action=edit{/if} frameborder="0" style="flex: 1;margin: 1em -1em 0 0;border-top: 1px solid lightgray;border-left: 1px solid lightgray;border-top-left-radius: 1em;"></iframe>
 
 </div>
 

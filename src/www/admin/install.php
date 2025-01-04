@@ -46,11 +46,15 @@ require_once ABSPATH . '/wp-load.php';
 $wp_user = wp_get_current_user();
 
 $form->runIf('save', function () use ($wp_user) {
+	if (!isset($wp_user->user_email)) {
+		throw new UserException("L'adresse email de l'administrateur Wordpress n'a pas été trouvée. Vérifiez là dans l'onglet Utilisateurs de Wordpress puis réessayez.");
+	}
+
 	$_POST['user_email'] = $wp_user->user_email;
 	$_POST['password'] = $_POST['password_confirmed'] = Utils::suggestPassword();
 
 	Install::installFromForm();
-	
+
 	$default_plugins = ['helloasso_checkout', 'caisse', 'usermap'];
 
 	foreach ($default_plugins as $key => $plugin) {
