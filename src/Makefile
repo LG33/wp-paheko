@@ -88,52 +88,52 @@ release: minify
 
 	rm -rf /tmp/paheko-build
 	mkdir -p /tmp/paheko-build
-	zip -r /tmp/paheko-build/src.zip *
-	unzip -d /tmp/paheko-build/src /tmp/paheko-build/src.zip
+	zip -r /tmp/paheko-build/wp-paheko.zip *
+	unzip -d /tmp/paheko-build/wp-paheko /tmp/paheko-build/wp-paheko.zip
 
 	# Download and package required KD2fw libraries
 	cd /tmp/paheko-build && \
 		wget ${KD2FW_URL}zip/${KD2FW_VERSION}/kd2.zip && \
 		unzip kd2.zip && \
-		cd src/include/lib && \
+		cd wp-paheko/include/lib && \
 		mkdir /tmp/paheko-build/kd2/src/lib/Wasso && \
 		cp Wasso/DB.php /tmp/paheko-build/kd2/src/lib/Wasso/DB.php && \
 		cp Wasso/PDO_DB.php /tmp/paheko-build/kd2/src/lib/Wasso/PDO_DB.php && \
-		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/src/include/lib/
+		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/wp-paheko/include/lib/
 
 	# Overwrite admin.css with united file
-	mv www/admin/static/mini.css /tmp/paheko-build/src/www/admin/static/admin.css
+	mv www/admin/static/mini.css /tmp/paheko-build/wp-paheko/www/admin/static/admin.css
 
 	# Generate .htaccess file
-	#cd /tmp/paheko-build/src && make htaccess
+	#cd /tmp/paheko-build/wp-paheko && make htaccess
 
 	# Remove useless files
-	cd /tmp/paheko-build/src/www/admin/static; \
+	cd /tmp/paheko-build/wp-paheko/www/admin/static; \
 		rm -f font/*.css font/*.json
-	cd /tmp/paheko-build/src; \
+	cd /tmp/paheko-build/wp-paheko; \
 		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal *.asc
 		#rm -r uploads data/cache
 
 	# Download modules and only keep the stable ones
-	cd /tmp/paheko-build/src && \
+	cd /tmp/paheko-build/wp-paheko && \
 		wget ${MODULES_URL}zip/${MODULES_VERSION}/modules.zip && \
 		unzip -o modules.zip && \
 		rm -rf `find modules/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f modules.zip
-	#cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/src/modules
+	#cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/wp-paheko/modules
 
 	# Download plugins and only keep the stable ones
-	cd /tmp/paheko-build/src/data && \
+	cd /tmp/paheko-build/wp-paheko/data && \
 		wget ${PLUGINS_URL}zip/${PLUGINS_VERSION}/plugins.zip && \
 		unzip -o plugins.zip && \
 		rm -rf `find plugins/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f plugins.zip
-	cp -r data/plugins/helloasso_checkout /tmp/paheko-build/src/data/plugins
+	cp -r data/plugins/helloasso_checkout /tmp/paheko-build/wp-paheko/data/plugins
 
-	cp ../README.md /tmp/paheko-build/src/readme.txt
-	chown -R www-data /tmp/paheko-build/src
+	cp ../README.md /tmp/paheko-build/wp-paheko/readme.txt
+	#chown -R www-data /tmp/paheko-build/wp-paheko
 
-	mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko
+	#mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko
 	#tar czvfh ../build/wp-paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build wp-paheko
 	zip -y -r -b /tmp/paheko-build/wp-paheko ../build/wp-paheko.zip *
 
