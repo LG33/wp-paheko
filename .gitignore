@@ -1,4 +1,7 @@
-src/data
+src/data/*
+!src/data/plugins
+src/data/plugins/*
+!src/data/plugins/helloasso_checkout
 src/include/lib/KD2
 src/include/data
 src/include/dependencies.list
