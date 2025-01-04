@@ -1,0 +1,19 @@
+{
+  "name": "lg33/wp-paheko",
+  "keywords": [
+    "WordPress",
+    "Paheko",
+    "Wasso"
+  ],
+  "license": "AGPL-3.0+",
+  "authors": [
+    {
+      "name": "Louis Gaillard",
+      "homepage": "https://lgaillard.fr/"
+    }
+  ],
+  "type": "library",
+  "require": {
+    "php": ">=7.3"
+  }
+}
