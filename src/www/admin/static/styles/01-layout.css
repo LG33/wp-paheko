@@ -208,6 +208,7 @@ main h1.main {
     position: absolute;
     top: 0.4em;
     right: 0.7em;
+	z-index: 1;
 }
 
 #user-btn a {

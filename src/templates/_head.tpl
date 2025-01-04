@@ -168,6 +168,7 @@ if (ALERT_MESSAGE && !$dialog) {
 		<p class="help">{$logged_user.email}</p>
 		{linkbutton label="Mes infos personnelles" href="!me"}
 		{linkbutton label="Mes activités & cotisations" href="!me/services.php"}
+		{linkbutton label="Accès administrateur·ices" href="/wp-admin/users.php"}
 		{if $help_url}
 		{linkbutton shape="help" label="Aide" target="_dialog" href=$help_url}
 		{/if}

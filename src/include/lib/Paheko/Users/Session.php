@@ -281,14 +281,15 @@ class Session extends \KD2\UserSession
 
 	public function start(bool $write = false)
 	{
+		return true;
 		// Override parent session start, we don't want to start a session
 		// when LOCAL_LOGIN is an array (eg. inside the NextCloud app,
 		// this can override the NC session and cause issues)
-		if (is_array(LOCAL_LOGIN)) {
-			return true;
-		}
+		/*if (is_array(LOCAL_LOGIN)) {
+				  return true;
+			  }
 
-		return parent::start($write);
+			  return parent::start($write);*/
 	}
 
 	public function close(): void

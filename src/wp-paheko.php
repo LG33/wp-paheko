@@ -47,8 +47,8 @@ add_action('activated_plugin', 'wp_paheko_activation_redirect');
 function wp_paheko_add_menu_page()
 {
 	add_menu_page(
-		esc_html__('Retourner dans Wasso', 'wp-paheko'),
-		esc_html__('Retourner dans Wasso', 'wp-paheko'),
+		esc_html__('Retourner dans Paheko', 'wp-paheko'),
+		esc_html__('Retourner dans Paheko', 'wp-paheko'),
 		'manage_options',
 		__DIR__ . '/www/index.php',
 		null, // callback

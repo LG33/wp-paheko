@@ -112,7 +112,7 @@ release: minify
 		rm -f font/*.css font/*.json
 	cd /tmp/paheko-build/src; \
 		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal *.asc
-		rm -r uploads data/cache
+		#rm -r uploads data/cache
 
 	# Download modules and only keep the stable ones
 	cd /tmp/paheko-build/src && \

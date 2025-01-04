@@ -20,7 +20,7 @@ jobs:
       run: echo "${{ github.ref }}"
       id: version
     - name: release
-      uses: actions/create-release@v2
+      uses: actions/create-release@v1
       id: create_release
       with:
         draft: false
