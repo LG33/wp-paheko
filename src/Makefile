@@ -134,9 +134,8 @@ release: minify
 	chown -R www-data /tmp/paheko-build/src
 
 	mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko
-	tar czvfh ../build/wp-paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build wp-paheko
-	#cd ../build
-	#zip -r -b /tmp/paheko-build/wp-paheko wp-paheko.zip *
+	#tar czvfh ../build/wp-paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build wp-paheko
+	zip -y -r -b /tmp/paheko-build/wp-paheko ../build/wp-paheko.zip *
 
 deb:
 	cd ../build/debian; ./makedeb.sh

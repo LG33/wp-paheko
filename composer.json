@@ -1,11 +1,12 @@
 {
   "name": "lg33/wp-paheko",
+  "description": "Ajoutez Paheko (logiciel libre de gestion et de comptabilité associative) directement à votre Wordpress !",
   "keywords": [
     "WordPress",
     "Paheko",
     "Wasso"
   ],
-  "license": "AGPL-3.0+",
+  "license": "AGPL-3.0-or-later",
   "authors": [
     {
       "name": "Louis Gaillard",
