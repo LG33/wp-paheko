@@ -120,7 +120,7 @@ release: minify
 		unzip -o modules.zip && \
 		rm -rf `find modules/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f modules.zip
-	cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/src/modules
+	#cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/src/modules
 
 	# Download plugins and only keep the stable ones
 	cd /tmp/paheko-build/src/data && \
