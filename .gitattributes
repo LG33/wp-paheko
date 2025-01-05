@@ -1,0 +1,10 @@
+.fossil-settings export-ignore
+.github export-ignore
+archives export-ignore
+build export-ignore
+doc export-ignore
+tests export-ignore
+tools export-ignore
+.travis.yml export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

@@ -88,30 +88,30 @@ release: minify
 
 	rm -rf /tmp/paheko-build
 	mkdir -p /tmp/paheko-build
-	zip -r /tmp/paheko-build/wp-paheko.zip *
-	unzip -d /tmp/paheko-build/wp-paheko /tmp/paheko-build/wp-paheko.zip
+	zip -r /tmp/paheko-build/src.zip src load.php
+	unzip -d /tmp/paheko-build/wp-paheko /tmp/paheko-build/src.zip
 
 	# Download and package required KD2fw libraries
 	cd /tmp/paheko-build && \
 		wget ${KD2FW_URL}zip/${KD2FW_VERSION}/kd2.zip && \
 		unzip kd2.zip && \
-		cd wp-paheko/include/lib && \
+		cd wp-paheko/src/include/lib && \
 		mkdir /tmp/paheko-build/kd2/src/lib/Wasso && \
 		cp Wasso/DB.php /tmp/paheko-build/kd2/src/lib/Wasso/DB.php && \
 		cp Wasso/PDO_DB.php /tmp/paheko-build/kd2/src/lib/Wasso/PDO_DB.php && \
-		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/wp-paheko/include/lib/
+		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/wp-paheko/src/include/lib/
 
 	# Overwrite admin.css with united file
-	mv www/admin/static/mini.css /tmp/paheko-build/wp-paheko/www/admin/static/admin.css
+	mv src/www/admin/static/mini.css /tmp/paheko-build/wp-paheko/src/www/admin/static/admin.css
 
 	# Generate .htaccess file
 	#cd /tmp/paheko-build/wp-paheko && make htaccess
 
 	# Remove useless files
-	cd /tmp/paheko-build/wp-paheko/www/admin/static; \
+	cd /tmp/paheko-build/wp-paheko/src/www/admin/static; \
 		rm -f font/*.css font/*.json
-	cd /tmp/paheko-build/wp-paheko; \
-		rm -f Makefile include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal *.asc
+	cd /tmp/paheko-build/wp-paheko/src; \
+		rm -f include/lib/KD2/data/countries.en.json data/error.log data/*.sqlite data/*.sqlite-journal *.asc
 		#rm -r uploads data/cache
 
 	# Download modules and only keep the stable ones
@@ -123,19 +123,21 @@ release: minify
 	#cp -r modules/helloasso_checkout_snippets /tmp/paheko-build/wp-paheko/modules
 
 	# Download plugins and only keep the stable ones
-	cd /tmp/paheko-build/wp-paheko/data && \
+	cd /tmp/paheko-build/wp-paheko/src/data && \
 		wget ${PLUGINS_URL}zip/${PLUGINS_VERSION}/plugins.zip && \
 		unzip -o plugins.zip && \
 		rm -rf `find plugins/ -name 'ignore' -type f -execdir pwd \;` && \
 		rm -f plugins.zip
-	cp -r data/plugins/helloasso_checkout /tmp/paheko-build/wp-paheko/data/plugins
+	cp -r src/data/plugins/helloasso_checkout /tmp/paheko-build/wp-paheko/src/data/plugins
 
-	cp ../README.md /tmp/paheko-build/wp-paheko/readme.txt
+	#cp ../README.md /tmp/paheko-build/wp-paheko/readme.txt
 	#chown -R www-data /tmp/paheko-build/wp-paheko
 
 	#mv /tmp/paheko-build/src /tmp/paheko-build/wp-paheko
 	#tar czvfh ../build/wp-paheko-${VERSION}.tar.gz --hard-dereference -C /tmp/paheko-build wp-paheko
-	zip -y -r -b /tmp/paheko-build/wp-paheko ../build/wp-paheko.zip *
+	cd /tmp/paheko-build && \
+		zip -r wp-paheko.zip wp-paheko/src wp-paheko/load.php
+		mv /tmp/paheko-build/wp-paheko.zip build/wp-paheko.zip
 
 deb:
 	cd ../build/debian; ./makedeb.sh
@@ -163,9 +165,9 @@ installer:
 	cd ../tools && php make_installer.php > install.php
 
 minify:
-	cat `ls www/admin/static/styles/[0-9]*.css` | sed 's/\.\.\///' > www/admin/static/mini.css
+	cat `ls src/www/admin/static/styles/[0-9]*.css` | sed 's/\.\.\///' > src/www/admin/static/mini.css
 	@# Minify is only gaining 500 gzipped bytes (4kB uncompressed) but making things hard to read/hack
-	@#yui-compressor --nomunge www/admin/static/mini.css -o www/admin/static/mini.css
+	@#yui-compressor --nomunge src/www/admin/static/mini.css -o src/www/admin/static/mini.css
 
 stable:
 	@echo -n "Checking branch... "; \

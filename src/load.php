@@ -90,7 +90,7 @@ function wp_paheko_init($plugin)
 					} else
 						$redirect = get_site_icon_url(32);
 				} else
-					$redirect = WP_CONTENT_URL . DIRECTORY_SEPARATOR . basename(dirname(dirname(__FILE__))) . DIRECTORY_SEPARATOR . basename(__DIR__) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'];
+					$redirect = WP_CONTENT_URL . DIRECTORY_SEPARATOR . implode('/', array_slice(explode('/', __DIR__), -3, 3)) . '/www' . $uri . '?' . $_SERVER['QUERY_STRING'];
 
 				wp_redirect($redirect, 301);
 				die();
