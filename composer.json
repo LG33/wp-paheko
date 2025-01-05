@@ -37,7 +37,7 @@
     "kd2/kd2fw": "^7.2"
   },
   "scripts": {
-    "post-install-cmd": [
+    "post-package-install": [
       "make modules",
       "make plugins"
     ]
