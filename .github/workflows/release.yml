@@ -15,7 +15,7 @@ jobs:
     - name: checkout repo
       uses: actions/checkout@main
     - name: build
-      run: cd src && make release
+      run: make release
     - name: version
       run: echo "${{ github.ref }}"
       id: version
