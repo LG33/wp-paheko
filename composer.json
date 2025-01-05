@@ -18,7 +18,7 @@
     "php": ">=7.3"
   },
   "scripts": {
-    "post-autoload-dump": [
+    "post-file-download": [
       "make library"
     ]
   }
