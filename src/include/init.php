@@ -21,7 +21,9 @@ if (!defined('Paheko\CONFIG_FILE')) {
 	define('Paheko\CONFIG_FILE', __DIR__ . '/../config.local.php');
 }
 
-require_once __DIR__ . '/lib/KD2/ErrorManager.php';
+if (!class_exists('KD2\ErrorManager')) {
+	require_once __DIR__ . '/lib/KD2/ErrorManager.php';
+}
 
 ErrorManager::enable(ErrorManager::DEVELOPMENT);
 ErrorManager::setLogFile(__DIR__ . '/data/error.log');
