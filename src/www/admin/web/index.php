@@ -7,10 +7,11 @@ use Paheko\Utils;
 use Paheko\Users\Session;
 
 require_once __DIR__ . '/_inc.php';
+require_once ABSPATH . '/wp-load.php';
 
 $session->requireAccess($session::SECTION_WEB, $session::ACCESS_WRITE);
 
-$wp_admin_url = WP_SITEURL . '/wp-admin/';
+$wp_admin_url = get_option('siteurl') . '/wp-admin/';
 $pages = get_pages();
 
 foreach ($pages as $key => &$page) {
