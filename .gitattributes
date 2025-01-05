@@ -1,7 +1,8 @@
 .fossil-settings export-ignore
 .github export-ignore
 archives export-ignore
-build export-ignore
+build/debian export-ignore
+build/windows export-ignore
 doc export-ignore
 tests export-ignore
 tools export-ignore

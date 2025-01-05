@@ -21,12 +21,12 @@ deps:
 
 modules:
 	wget ${MODULES_URL}zip/${MODULES_BRANCH}/modules.zip -O modules.zip
-	unzip -u modules.zip
+	unzip -u modules.zip -d src
 	rm -f modules.zip
 
 plugins:
 	wget ${PLUGINS_URL}zip/${PLUGINS_BRANCH}/plugins.zip -O plugins.zip
-	unzip -u plugins.zip -d data
+	unzip -u plugins.zip -d src/data
 	rm -f plugins.zip
 
 dev-server:
@@ -157,6 +157,17 @@ publish: installer release deb windows
 	cd ../tools && fossil uv add install.php && rm install.php
 	fossil uv sync
 	cd ../build/windows && make publish
+
+library: plugins modules minify
+	# Download and package required KD2fw libraries
+	wget ${KD2FW_URL}zip/${KD2FW_VERSION}/kd2.zip
+	unzip kd2.zip
+	rm kd2.zip
+	mkdir kd2/src/lib/Wasso
+	cp src/include/lib/Wasso/DB.php kd2/src/lib/Wasso/DB.php
+	cp src/include/lib/Wasso/PDO_DB.php kd2/src/lib/Wasso/PDO_DB.php
+	rsync --files-from=src/include/lib/dependencies.list -r kd2/src/lib/ src/include/lib/
+	rm -r kd2
 
 check-dependencies:
 	grep -hEo '^use \\?KD2\\[^; ]+|\\KD2\\[^\(:; ]+' -R include/lib/Garradin www | sed -r 's/^use \\?KD2\\|^\\KD2\\//' | sort | uniq

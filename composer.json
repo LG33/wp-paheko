@@ -16,5 +16,10 @@
   "type": "library",
   "require": {
     "php": ">=7.3"
+  },
+  "scripts": {
+    "post-autoload-dump": [
+      "make library"
+    ]
   }
 }
