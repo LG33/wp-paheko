@@ -35,5 +35,11 @@
   "require": {
     "php": ">=7.3",
     "kd2/kd2fw": "^7.2"
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "make modules",
+      "make plugins"
+    ]
   }
 }
