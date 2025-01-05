@@ -117,6 +117,8 @@ class Template extends Smartyer
 		$this->assign('self_url', Utils::getSelfURI());
 		$this->assign('self_url_no_qs', Utils::getSelfURI(false));
 
+		$this->assign('wp_admin_url', (function_exists('get_option') ? get_option('siteurl') : '') . '/wp-admin/');
+
 		$session = null;
 
 		if (!defined('Paheko\SKIP_STARTUP_CHECK')) {
