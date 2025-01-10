@@ -21,12 +21,12 @@ deps:
 
 modules:
 	wget ${MODULES_URL}zip/${MODULES_BRANCH}/modules.zip -O modules.zip
-	unzip -u modules.zip -d src
+	unzip -fq modules.zip -d src
 	rm -f modules.zip
 
 plugins:
 	wget ${PLUGINS_URL}zip/${PLUGINS_BRANCH}/plugins.zip -O plugins.zip
-	unzip -u plugins.zip -d src/data
+	unzip -fq plugins.zip -d src/data
 	rm -f plugins.zip
 
 dev-server:
