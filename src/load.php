@@ -50,13 +50,32 @@ function wp_paheko_add_menu_page()
 		esc_html__('Retourner dans Paheko', 'wp-paheko'),
 		esc_html__('Retourner dans Paheko', 'wp-paheko'),
 		'manage_options',
-		'wp-paheko',
-		fn() => require_once __DIR__ . '/www/index.php',
+		esc_url(get_site_url(null, '/admin')),
+		null,
 		'dashicons-arrow-left-alt',
 		0
 	);
 }
 add_action('admin_menu', 'wp_paheko_add_menu_page', 1);
+
+/**
+ * Adds a link to the admin bar.
+ *
+ * @since n.e.x.t
+ *
+ * @param WP_Admin_Bar $admin_bar The admin bar object.
+ */
+function wp_paheko_adminbar_item($admin_bar)
+{
+	$args = array(
+		'id' => 'wp-paheko',
+		'title' => "Ouvrir Paheko",
+		'href' => esc_url(get_site_url(null, '/admin')),
+		'meta' => false,
+	);
+	$admin_bar->add_node($args);
+}
+add_action('admin_bar_menu', 'wp_paheko_adminbar_item', 1);
 
 function wp_paheko_init($plugin)
 {
