@@ -96,9 +96,6 @@ release: minify
 		wget ${KD2FW_URL}zip/${KD2FW_VERSION}/kd2.zip && \
 		unzip kd2.zip && \
 		cd wp-paheko/src/include/lib && \
-		mkdir /tmp/paheko-build/kd2/src/lib/Wasso && \
-		cp Wasso/DB.php /tmp/paheko-build/kd2/src/lib/Wasso/DB.php && \
-		cp Wasso/PDO_DB.php /tmp/paheko-build/kd2/src/lib/Wasso/PDO_DB.php && \
 		rsync --files-from=dependencies.list -r /tmp/paheko-build/kd2/src/lib/ /tmp/paheko-build/wp-paheko/src/include/lib/
 
 	# Overwrite admin.css with united file

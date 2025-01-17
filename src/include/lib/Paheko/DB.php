@@ -2,16 +2,14 @@
 
 namespace Paheko;
 
-use PDO;
-
-use Wasso\PDO_DB;
+use KD2\DB\SQLite3;
 use KD2\DB\DB_Exception;
 use KD2\ErrorManager;
 
 use Paheko\Users\DynamicFields;
 use Paheko\Entities\Email\Email;
 
-class DB extends PDO_DB
+class DB extends SQLite3
 {
 	/**
 	 * Application ID pour SQLite
@@ -97,7 +95,8 @@ class DB extends PDO_DB
 	 * Disable logging if enabled
 	 * useful to disable logging when reloading log page
 	 */
-	public function disableLog(): void {
+	public function disableLog(): void
+	{
 		$this->callback = null;
 		$this->_log_store = [];
 	}
@@ -160,8 +159,7 @@ class DB extends PDO_DB
 
 		if ($method == 'execute') {
 			$sql = $params[0]->getSQL(true);
-		}
-		else {
+		} else {
 			$sql = $params[0];
 		}
 
@@ -202,8 +200,7 @@ class DB extends PDO_DB
 					foreach ($explain as $e) {
 						$row->explain .= $e->detail . "\n";
 					}
-				}
-				catch (DB_Exception $e) {
+				} catch (DB_Exception $e) {
 					$row->explain = 'Error: ' . $e->getMessage();
 				}
 			}
@@ -236,13 +233,13 @@ class DB extends PDO_DB
 		$this->_install_check = !$disable;
 	}
 
-	public function connect(): void
+	public function connect(bool $check_installed = true): void
 	{
 		if (null !== $this->db) {
 			return;
 		}
 
-		if ($this->_install_check && !self::isInstalled()) {
+		if ($check_installed && $this->_install_check && !self::isInstalled()) {
 			throw new \LogicException('Database has not been installed!');
 		}
 
@@ -252,10 +249,10 @@ class DB extends PDO_DB
 		$this->db->exec('PRAGMA foreign_keys = ON;');
 
 		// 10 secondes
-		$this->db->setAttribute(PDO::ATTR_TIMEOUT, 10);
+		$this->db->busyTimeout(10 * 1000);
 
 		$mode = strtoupper(SQLITE_JOURNAL_MODE);
-		$set_mode = $this->db->query('PRAGMA journal_mode;')->fetchColumn();
+		$set_mode = $this->db->querySingle('PRAGMA journal_mode;');
 		$set_mode = strtoupper($set_mode);
 
 		if ($set_mode !== $mode) {
@@ -270,21 +267,66 @@ class DB extends PDO_DB
 		}
 
 		self::registerCustomFunctions($this->db);
+		self::toggleAuthorizer($this->db, true);
+	}
+
+	static public function toggleAuthorizer($db, bool $enable): void
+	{
+		if (!method_exists($db, 'setAuthorizer')) {
+			return;
+		}
+
+		$db->setAuthorizer($enable ? [self::class, 'safetyAuthorizer'] : null);
+	}
+
+	/**
+	 * Basic authorizer to make sure dangerous functions cannot be used:
+	 * ATTACH, PRAGMA
+	 */
+	static public function safetyAuthorizer(int $action, ...$args)
+	{
+		if ($action === \SQLite3::ATTACH) {
+			return \SQLite3::DENY;
+		}
+
+		if ($action === \SQLite3::PRAGMA) {
+			// Only allow some PRAGMA statements
+			static $allowed = [
+			'integrity_check',
+			'foreign_key_check',
+			'application_id',
+			'user_version',
+			'compile_options',
+			'legacy_alter_table',
+			'foreign_keys',
+			'query_only',
+			'index_list',
+			'foreign_key_list',
+			'table_info',
+			'index_xinfo',
+			];
+
+			if (!in_array($args[0], $allowed, true)) {
+				return \SQLite3::DENY;
+			}
+		}
+
+		return \SQLite3::OK;
 	}
 
 	static public function registerCustomFunctions($db)
 	{
-		$db->sqliteCreateFunction('dirname', [Utils::class, 'dirname']);
-		$db->sqliteCreateFunction('basename', [Utils::class, 'basename']);
-		$db->sqliteCreateFunction('unicode_like', [self::class, 'unicodeLike']);
-		$db->sqliteCreateFunction('transliterate_to_ascii', [Utils::class, 'unicodeTransliterate']);
-		$db->sqliteCreateFunction('email_hash', [Email::class, 'getHash']);
-		$db->sqliteCreateFunction('md5', 'md5');
-		$db->sqliteCreateFunction('uuid', [Utils::class, 'uuid']);
-		$db->sqliteCreateFunction('random_string', [Utils::class, 'random_string']);
-		$db->sqliteCreateFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
+		$db->createFunction('dirname', [Utils::class, 'dirname']);
+		$db->createFunction('basename', [Utils::class, 'basename']);
+		$db->createFunction('unicode_like', [self::class, 'unicodeLike']);
+		$db->createFunction('transliterate_to_ascii', [Utils::class, 'unicodeTransliterate']);
+		$db->createFunction('email_hash', [Email::class, 'getHash']);
+		$db->createFunction('md5', 'md5');
+		$db->createFunction('uuid', [Utils::class, 'uuid']);
+		$db->createFunction('random_string', [Utils::class, 'random_string']);
+		$db->createFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
 
-		$db->sqliteCreateFunction('print_dynamic_field', function($name, $value) {
+		$db->createFunction('print_dynamic_field', function ($name, $value) {
 			$field = DynamicFields::get($name);
 
 			if (!$field) {
@@ -294,7 +336,7 @@ class DB extends PDO_DB
 			return $field->getStringValue($value);
 		});
 
-		$db->sqliteCreateFunction('match_dynamic_field', function($name, $value, ...$match) {
+		$db->createFunction('match_dynamic_field', function ($name, $value, ...$match) {
 			if (empty($value)) {
 				return null;
 			}
@@ -314,8 +356,7 @@ class DB extends PDO_DB
 
 				if ($first === 'AND' || $first === 'OR') {
 					array_shift($match);
-				}
-				else {
+				} else {
 					$first = 'OR';
 				}
 
@@ -330,8 +371,7 @@ class DB extends PDO_DB
 
 					if ($first === 'OR' && $found) {
 						return 1;
-					}
-					elseif ($first === 'AND' && !$found) {
+					} elseif ($first === 'AND' && !$found) {
 						return null;
 					}
 				}
@@ -342,18 +382,18 @@ class DB extends PDO_DB
 			return $match === $value;
 		});
 
-		$db->sqliteCreateCollation('U_NOCASE', [Utils::class, 'unicodeCaseComparison']);
+		$db->createCollation('U_NOCASE', [Utils::class, 'unicodeCaseComparison']);
+		$db->createCollation('NAT_NOCASE', 'strnatcasecmp');
 	}
 
 	public function toggleUnicodeLike(bool $enable): void
 	{
 		if ($enable) {
-			$this->db->sqliteCreateFunction('like', [$this, 'unicodeLike']);
-		}
-		else {
+			$this->createFunction('like', [$this, 'unicodeLike']);
+		} else {
 			// We should revert LIKE to the default, but we can't currently (FIXME?)
 			// see https://github.com/php/php-src/issues/10726
-			//$db->sqliteCreateFunction('like', null);
+			//$db->createFunction('like', null);
 		}
 	}
 
@@ -369,15 +409,14 @@ class DB extends PDO_DB
 
 	static public function getVersion($db)
 	{
-		$v = (int) $db->query('PRAGMA user_version;')->fetchColumn();
+		$v = (int) $db->querySingle('PRAGMA user_version;');
 		$v = self::parseVersion($v);
 
 		if (null === $v) {
 			try {
 				// For legacy version before 1.1.0
-				$v = $db->query('SELECT valeur FROM config WHERE cle = \'version\';')->fetchColumn();
-			}
-			catch (\Exception $e) {
+				$v = $db->querySingle('SELECT valeur FROM config WHERE cle = \'version\';');
+			} catch (\Exception $e) {
 				throw new \RuntimeException('Cannot find application version', 0, $e);
 			}
 		}
@@ -433,7 +472,7 @@ class DB extends PDO_DB
 			throw new \InvalidArgumentException('Invalid version number: ' . $version);
 		}
 
-		$version = ((int)$match[1] * 100 * 100 * 100) + ((int)$match[2] * 100 * 100) + ((int)$match[3] * 100);
+		$version = ((int) $match[1] * 100 * 100 * 100) + ((int) $match[2] * 100 * 100) + ((int) $match[3] * 100);
 
 		if (isset($match[5])) {
 			if ($match[5] > 24) {
@@ -441,16 +480,13 @@ class DB extends PDO_DB
 			}
 
 			if ($match[4] == 'rc') {
-				$version += (int)$match[5] + 50;
-			}
-			elseif ($match[4] == 'beta') {
-				$version += (int)$match[5] + 25;
-			}
-			elseif ($match[4] == 'alpha') {
-				$version += (int)$match[5];
-			}
-			else {
-				$version += (int)$match[5] + 75;
+				$version += (int) $match[5] + 50;
+			} elseif ($match[4] == 'beta') {
+				$version += (int) $match[5] + 25;
+			} elseif ($match[4] == 'alpha') {
+				$version += (int) $match[5];
+			} else {
+				$version += (int) $match[5] + 75;
 			}
 		}
 
@@ -477,7 +513,7 @@ class DB extends PDO_DB
 
 	public function lastErrorMsg()
 	{
-		return $this->db->errorInfo()[1];
+		return $this->db->lastErrorMsg();
 	}
 
 	/**
@@ -494,8 +530,7 @@ class DB extends PDO_DB
 			if ($this->firstColumn('PRAGMA foreign_keys;')) {
 				throw new \LogicException('Cannot disable foreign keys in an already started transaction');
 			}
-		}
-		else {
+		} else {
 			$this->db->exec('PRAGMA legacy_alter_table = OFF;');
 			$this->db->exec('PRAGMA foreign_keys = ON;');
 		}
@@ -512,7 +547,8 @@ class DB extends PDO_DB
 	 * @see https://www.sqlite.org/c3ref/strlike.html
 	 * @see https://sqlite.org/src/file?name=ext/icu/icu.c&ci=trunk
 	 */
-	static public function unicodeLike($pattern, $value, $escape = null) {
+	static public function unicodeLike($pattern, $value, $escape = null)
+	{
 		if (null === $pattern || null === $value) {
 			return false;
 		}

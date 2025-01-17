@@ -732,7 +732,7 @@ const ADMIN_COLOR2 = '#ffce8a';
  * @var string|null
  */
 
-const FILE_STORAGE_BACKEND = 'FileSystem';
+//const FILE_STORAGE_BACKEND = 'FileSystem';
 
 /**
  * Configuration du stockage des fichiers
@@ -751,7 +751,7 @@ const FILE_STORAGE_BACKEND = 'FileSystem';
  * @var string|null
  */
 
-const FILE_STORAGE_CONFIG = __DIR__ . '/uploads';
+//const FILE_STORAGE_CONFIG = __DIR__ . '/uploads';
 
 /**
  * Forcer le quota disponible pour les fichiers
@@ -1015,5 +1015,3 @@ const FILE_STORAGE_CONFIG = __DIR__ . '/uploads';
  * @var null|string
  */
 //const LOCAL_ADDRESSES_ROOT = ROOT . '/local_addresses/';
-
-const SECRET_KEY = 'bRuucLb6gArwpqnQvjqX+fJdYBI9PzmzTd097jF8RFQNXDc8krj+PrRoepIIHKpcjANbxKEn/wilmlhuztJNxA==';

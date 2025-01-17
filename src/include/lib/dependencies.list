@@ -45,4 +45,3 @@ KD2/WebDAV/Server.php
 KD2/WebDAV/WOPI.php
 KD2/ZipReader.php
 KD2/ZipWriter.php
-Wasso/PDO_DB.php
