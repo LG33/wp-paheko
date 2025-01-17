@@ -31,14 +31,13 @@ if (!defined('WPINC')) {
 
 /**
  * Currently plugin version.
- * Start at version 1.0.0 and use SemVer - https://semver.org
- * Rename this for your plugin and update it as you release new versions.
  */
-define('WP_PAHEKO_VERSION', '1.0.0');
+define('WP_PAHEKO_VERSION', '1.3.12.2');
 
 function wp_paheko_activation_redirect($plugin)
 {
 	if ($plugin == plugin_basename(__FILE__)) {
+		copy('config.dist.php', 'config.local.php');
 		exit(wp_redirect('/admin/'));
 	}
 }

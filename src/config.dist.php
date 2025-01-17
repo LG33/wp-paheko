@@ -656,19 +656,19 @@ namespace Paheko;
  * Couleur primaire de l'interface admin par défaut
  * (peut être personnalisée dans la configuration)
  *
- * Défaut : #faa130
+ * Défaut : #20787a
  * @var string
  */
 
-//const ADMIN_COLOR1 = '#faa130';
+const ADMIN_COLOR1 = '#faa130';
 
 /**
  * Couleur secondaire de l'interface admin
- * Défaut : #ffce8a
+ * Défaut : #85b9ba
  * @var string
  */
 
-//const ADMIN_COLOR2 = '#ffce8a';
+const ADMIN_COLOR2 = '#ffce8a';
 
 /**
  * Image de fond par défaut de l'interface admin
