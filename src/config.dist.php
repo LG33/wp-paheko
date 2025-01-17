@@ -147,7 +147,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const DB_FILE = DATA_ROOT . '/association.sqlite';
+const DB_FILE = DATA_ROOT . '/db/association.sqlite';
 
 /**
  * Emplacement de stockage des plugins

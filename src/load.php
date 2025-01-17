@@ -74,7 +74,7 @@ function wp_paheko_adminbar_item($admin_bar)
 	);
 	$admin_bar->add_node($args);
 }
-add_action('admin_bar_menu', 'wp_paheko_adminbar_item', 1);
+add_action('admin_bar_menu', 'wp_paheko_adminbar_item', 999);
 
 function wp_paheko_init($plugin)
 {
