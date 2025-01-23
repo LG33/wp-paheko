@@ -1,3 +1,4 @@
+src/config.local.php
 src/data/*
 !src/data/plugins
 src/data/plugins/*

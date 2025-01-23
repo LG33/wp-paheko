@@ -86,7 +86,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const ROOT = __DIR__;
+const ROOT = __DIR__;
 
 /**
  * Répertoire où sont situées les données de Paheko
@@ -96,7 +96,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const DATA_ROOT = ROOT . '/data';
+const DATA_ROOT = ROOT . '/data';
 
 /**
  * Répertoire où est situé le cache,
