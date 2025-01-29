@@ -717,7 +717,32 @@ class Emails
 		}
 
 		if ($smtp) {
-			$smtp->send($message);
+			try {
+				$return = $smtp->send($message);
+				// TODO: store return message from SMTP server
+			} catch (SMTP_Exception $e) {
+				// Handle invalid recipients addresses
+				if ($r = $e->getRecipient()) {
+					if ($e->getCode() >= 500) {
+						self::handleManualBounce($r, 'hard', $e->getMessage());
+						// Don't retry delivering this email
+						return true;
+					} elseif ($e->getCode() === SMTP::GREYLISTING_CODE) {
+						// Resend later (FIXME: only retry for X times)
+						return false;
+					} elseif ($e->getCode() >= 400) {
+						self::handleManualBounce($r, 'soft', $e->getMessage());
+						return true;
+					}
+				}
+
+				throw $e;
+			}
+
+			if (!$in_queue) {
+				$smtp->disconnect();
+				$smtp = null;
+			}
 		}
 		else {
 			$message->send();

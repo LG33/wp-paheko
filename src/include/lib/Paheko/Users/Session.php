@@ -289,18 +289,7 @@ class Session extends \KD2\UserSession
 				  return true;
 			  }
 
-			  return parent::start($write);*/
-	}
-
-	public function close(): void
-	{
-		// Release lock so that other processes are not blocked
-		// see https://www.php.net/manual/en/function.session-start.php
-		// and https://ma.ttias.be/php-session-locking-prevent-sessions-blocking-in-requests/
-
-		if ($this->non_locking) {
-			@session_write_close();
-		}
+		return parent::start($write);
 	}
 
 	public function forceLogin($login, bool $allow_new_session = true): bool
@@ -609,7 +598,7 @@ class Session extends \KD2\UserSession
 		}
 
 		$this->_user = Users::get($this->user);
-		
+
 		// If user does not exist anymore
 		if (!$this->_user) {
 			$this->logout();

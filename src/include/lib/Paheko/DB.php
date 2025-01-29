@@ -95,8 +95,7 @@ class DB extends SQLite3
 	 * Disable logging if enabled
 	 * useful to disable logging when reloading log page
 	 */
-	public function disableLog(): void
-	{
+	public function disableLog(): void {
 		$this->callback = null;
 		$this->_log_store = [];
 	}
@@ -159,7 +158,8 @@ class DB extends SQLite3
 
 		if ($method == 'execute') {
 			$sql = $params[0]->getSQL(true);
-		} else {
+		}
+		else {
 			$sql = $params[0];
 		}
 
@@ -200,7 +200,8 @@ class DB extends SQLite3
 					foreach ($explain as $e) {
 						$row->explain .= $e->detail . "\n";
 					}
-				} catch (DB_Exception $e) {
+				}
+				catch (DB_Exception $e) {
 					$row->explain = 'Error: ' . $e->getMessage();
 				}
 			}
@@ -317,7 +318,7 @@ class DB extends SQLite3
 		$db->createFunction('random_string', [Utils::class, 'random_string']);
 		$db->createFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
 
-		$db->createFunction('print_dynamic_field', function ($name, $value) {
+		$db->createFunction('print_dynamic_field', function($name, $value) {
 			$field = DynamicFields::get($name);
 
 			if (!$field) {
@@ -327,7 +328,7 @@ class DB extends SQLite3
 			return $field->getStringValue($value);
 		});
 
-		$db->createFunction('match_dynamic_field', function ($name, $value, ...$match) {
+		$db->createFunction('match_dynamic_field', function($name, $value, ...$match) {
 			if (empty($value)) {
 				return null;
 			}
@@ -347,7 +348,8 @@ class DB extends SQLite3
 
 				if ($first === 'AND' || $first === 'OR') {
 					array_shift($match);
-				} else {
+				}
+				else {
 					$first = 'OR';
 				}
 
@@ -362,7 +364,8 @@ class DB extends SQLite3
 
 					if ($first === 'OR' && $found) {
 						return 1;
-					} elseif ($first === 'AND' && !$found) {
+					}
+					elseif ($first === 'AND' && !$found) {
 						return null;
 					}
 				}
@@ -381,7 +384,8 @@ class DB extends SQLite3
 	{
 		if ($enable) {
 			$this->createFunction('like', [$this, 'unicodeLike']);
-		} else {
+		}
+		else {
 			// We should revert LIKE to the default, but we can't currently (FIXME?)
 			// see https://github.com/php/php-src/issues/10726
 			//$db->createFunction('like', null);
@@ -457,7 +461,7 @@ class DB extends SQLite3
 			throw new \InvalidArgumentException('Invalid version number: ' . $version);
 		}
 
-		$version = ((int) $match[1] * 100 * 100 * 100) + ((int) $match[2] * 100 * 100) + ((int) $match[3] * 100);
+		$version = ((int)$match[1] * 100 * 100 * 100) + ((int)$match[2] * 100 * 100) + ((int)$match[3] * 100);
 
 		if (isset($match[5])) {
 			if ($match[5] > 24) {
@@ -465,13 +469,16 @@ class DB extends SQLite3
 			}
 
 			if ($match[4] == 'rc') {
-				$version += (int) $match[5] + 50;
-			} elseif ($match[4] == 'beta') {
-				$version += (int) $match[5] + 25;
-			} elseif ($match[4] == 'alpha') {
-				$version += (int) $match[5];
-			} else {
-				$version += (int) $match[5] + 75;
+				$version += (int)$match[5] + 50;
+			}
+			elseif ($match[4] == 'beta') {
+				$version += (int)$match[5] + 25;
+			}
+			elseif ($match[4] == 'alpha') {
+				$version += (int)$match[5];
+			}
+			else {
+				$version += (int)$match[5] + 75;
 			}
 		}
 
@@ -515,7 +522,8 @@ class DB extends SQLite3
 			if ($this->firstColumn('PRAGMA foreign_keys;')) {
 				throw new \LogicException('Cannot disable foreign keys in an already started transaction');
 			}
-		} else {
+		}
+		else {
 			$this->db->exec('PRAGMA legacy_alter_table = OFF;');
 			$this->db->exec('PRAGMA foreign_keys = ON;');
 		}
@@ -532,8 +540,7 @@ class DB extends SQLite3
 	 * @see https://www.sqlite.org/c3ref/strlike.html
 	 * @see https://sqlite.org/src/file?name=ext/icu/icu.c&ci=trunk
 	 */
-	static public function unicodeLike($pattern, $value, $escape = null)
-	{
+	static public function unicodeLike($pattern, $value, $escape = null) {
 		if (null === $pattern || null === $value) {
 			return false;
 		}
