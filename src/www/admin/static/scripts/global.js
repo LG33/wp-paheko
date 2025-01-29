@@ -1,11 +1,14 @@
 (function () {
-	let d = document.documentElement.dataset;
+	let d = document.documentElement;
 	window.g = window.garradin = {
-		admin_url: d.url,
-		static_url: d.url + 'static/',
-		version: d.version,
+		admin_url: d.dataset.url,
+		static_url: d.dataset.url + 'static/',
+		version: d.dataset.version,
 		loaded: {}
 	};
+
+	d.classList.remove('nojs');
+	d.classList.add('js');
 
 	window.$ = function(selector) {
 		if (!selector.match(/^[.#]?[a-z0-9_-]+$/i))
@@ -33,12 +36,17 @@
 
 	g.onload = function(callback, dom)
 	{
-		if (typeof dom == 'undefined')
+		if (typeof dom === 'undefined') {
 			dom = true;
+		}
 
 		var eventName = dom ? 'DOMContentLoaded' : 'load';
 
-		document.addEventListener(eventName, callback, false);
+		window.addEventListener(eventName, callback);
+
+		if (!dom && document.readyState === 'complete') {
+			callback();
+		}
 	};
 
 	g.toggle = function(selector, visibility, resize_parent)
@@ -207,7 +215,7 @@
 
 		t.innerText = options.caption || '';
 
-		if (options.caption) {
+		if (options.caption && !document.title.match(options.caption)) {
 			document.title = options.caption + ' — ' + g.dialog_title;
 		}
 
@@ -339,17 +347,7 @@
 		if (!dialog.dataset.caption && document.title) {
 			var title = document.title.replace(/^([^—-]+).*$/, "$1");
 			dialog.querySelector('.title').innerText = title;
-			p.g.dialog_title = p.document.title;
 			p.document.title = document.title + ' — ' + p.g.dialog_title;
-
-			window.addEventListener('beforeunload', () => {
-				if (!p.g.dialog_title) {
-					return;
-				}
-
-				p.document.title = p.g.dialog_title;
-				p.g.dialog_title = null;
-			});
 		}
 
 		let height;
@@ -891,6 +889,42 @@
 		if (document.querySelector('input[list], textarea[list]')) {
 			g.script('scripts/inputs/datalist.js');
 		}
+
+		var dropdown;
+
+		var closeDropdownEvent = (evt) => {
+			if ((evt.type === 'keydown' && evt.key === 'Escape')
+				|| (evt.type === 'click' && !dropdown.contains(evt.target))) {
+				closeDropdown();
+				evt.preventDefault();
+				return false;
+			}
+		};
+
+		var closeDropdown = () => {
+			dropdown.classList.remove('open');
+			dropdown.setAttribute('aria-expanded', 'false');
+			dropdown = null;
+			window.removeEventListener('keydown', closeDropdownEvent, {'capture': true});
+			window.removeEventListener('click', closeDropdownEvent, {'capture': true});
+		};
+
+		var openDropdown = (e) => {
+			if (e.classList.contains('open')) {
+				return true;
+			}
+
+			dropdown = e;
+			e.classList.add('open');
+			e.setAttribute('aria-expanded', 'true');
+			window.addEventListener('keydown', closeDropdownEvent, {'capture': true});
+			window.addEventListener('click', closeDropdownEvent, {'capture': true});
+			return false;
+		}
+
+		document.querySelectorAll('nav.dropdown').forEach(e => {
+			e.onclick = () => openDropdown(e);
+		});
 	});
 
 	g.onload(() => {
@@ -966,9 +1000,9 @@
 		});
 	});
 
-	g.onload(() => {
-		g.resizeParentDialog();
+	g.onload(() => g.resizeParentDialog(), false);
 
+	g.onload(() => {
 		// File drag and drop support
 		if ($('[data-upload-url]').length) {
 			g.script('scripts/file_drag.js');

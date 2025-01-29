@@ -337,7 +337,8 @@ class CommonModifiers
 			return $str;
 		}
 
-		$str = preg_replace('/(?:\h|(?!&\w))([?!:»;])(?=\s|$)/us', "\xc2\xa0\\1", $str);
+		$str = preg_replace('/(?:\h|(?!&\w))([?!:»;€])(?=\s|$)/us', "\xc2\xa0\\1", $str);
+		$str = preg_replace('/(\d) +(\d{3})/', "\\1\xc2\xa0\\2", $str);
 		$str = preg_replace('/(?<=^|\s)([«])[\h]*/u', "\\1\xc2\xa0", (string)$str);
 		return $str;
 	}

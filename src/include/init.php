@@ -10,6 +10,11 @@ use KD2\DB\EntityManager;
 
 $start_timer = microtime(true);
 
+// Disable output buffering, if enabled
+// as some hosting providers do enable it by default
+@ini_set('output_buffering', false);
+@ob_end_clean();
+
 foreach ($_ENV as $key => $value) {
 	if (strpos($key, 'PAHEKO_') === 0) {
 		$key = substr($key, strlen('PAHEKO_'));
@@ -149,11 +154,11 @@ if (!defined('Paheko\WWW_URL') && $host !== null) {
 }
 
 static $default_config = [
-	// USER_CONFIG_FILE is used in single-user setup (Debian/Windows)
+	// DESKTOP_CONFIG_FILE is used in single-user setup (Debian/Windows)
 	// to be able to add user-specific config constants, even though we already
 	// have a config.local.php for OS-specific stuff, this also allows
 	// to remove LOCAL_USER and have a multi-user setup on a single computer
-	'USER_CONFIG_FILE'      => null,
+	'DESKTOP_CONFIG_FILE'   => null,
 	'CACHE_ROOT'            => DATA_ROOT . '/cache',
 	'SHARED_CACHE_ROOT'     => DATA_ROOT . '/cache/shared',
 	'WEB_CACHE_ROOT'        => DATA_ROOT . '/cache/web/%host%',
@@ -162,12 +167,14 @@ static $default_config = [
 	'PLUGINS_ROOT'          => DATA_ROOT . '/plugins',
 	'PLUGINS_ALLOWLIST'     => null,
 	'PLUGINS_BLOCKLIST'     => null,
-	'ALLOW_MODIFIED_IMPORT' => true,
+	'ALLOW_MODIFIED_IMPORT' => false,
 	'SHOW_ERRORS'           => true,
 	'MAIL_ERRORS'           => false,
 	'ERRORS_REPORT_URL'     => null,
 	'REPORT_USER_EXCEPTIONS' => 0,
 	'ENABLE_TECH_DETAILS'   => true,
+	'AUDIT_LOG_FILE'        => null,
+	'AUDIT_LOG_SIZE'        => 1024*1024,
 	'HTTP_LOG_FILE'         => null,
 	'WEBDAV_LOG_FILE'       => null,
 	'WOPI_LOG_FILE'         => null,
@@ -326,6 +333,7 @@ ErrorManager::setContext([
 	'root_directory'   => ROOT,
 	'paheko_data_root' => DATA_ROOT,
 	'paheko_version'   => paheko_version(),
+	'sqlite_journal'   => SQLITE_JOURNAL_MODE,
 ]);
 
 
@@ -404,6 +412,13 @@ function user_error(UserException $e)
 	exit;
 }
 
+function ngettext(string $singular, string $plural, int $count): string
+{
+	$str = $count > 1 ? $plural : $singular;
+	$str = str_replace('%n', $count, $str);
+	return $str;
+}
+
 if (REPORT_USER_EXCEPTIONS < 2) {
 	// Message d'erreur simple pour les erreurs de l'utilisateur
 	ErrorManager::setCustomExceptionHandler('\Paheko\UserException', '\Paheko\user_error');
@@ -412,8 +427,12 @@ if (REPORT_USER_EXCEPTIONS < 2) {
 // Clé secrète utilisée pour chiffrer les tokens CSRF etc.
 if (!defined('Paheko\SECRET_KEY')) {
 	$key = base64_encode(random_bytes(64));
-	Install::setConfig(CONFIG_FILE, 'SECRET_KEY', $key);
 	define('Paheko\SECRET_KEY', $key);
+
+	// CONFIG_FILE may be NULL (eg. in unit tests)
+	if (null !== CONFIG_FILE) {
+		Install::setConfig(CONFIG_FILE, ['SECRET_KEY' => $key]);
+	}
 }
 
 // Define a local secret key derived of the main secret key and the data root

@@ -4,7 +4,7 @@ $title ??= '';
 $current ??= '';
 ?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr" class="{if $dialog}dialog{/if}{if $logged_user.preferences.dark_theme} dark{/if}" data-version="{$version_hash}" data-url="{$admin_url}"{if !empty($prefer_landscape)} data-prefer-landscape="1"{/if}>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr" class="nojs{if $dialog} dialog{/if}{if $logged_user.preferences.dark_theme} dark{/if}" data-version="{$version_hash}" data-url="{$admin_url}"{if !empty($prefer_landscape)} data-prefer-landscape="1"{/if}>
 <head>
 	<meta charset="utf-8" />
 	<meta name="v" content="{$version_hash}" />
@@ -65,7 +65,7 @@ if (ALERT_MESSAGE && !$dialog) {
 	<div id="sticky-alert"><?=ALERT_MESSAGE?></div>
 {/if}
 
-{if !array_key_exists('_dialog', $_GET) && empty($layout)}
+{if !array_key_exists('_dialog', $_GET) && $layout !== 'public' && $layout !== 'raw'}
 <nav id="menu">
 	<figure class="logo">
 	{if isset($config) && ($url = $config->fileURL('logo', '150px'))}
@@ -185,6 +185,6 @@ if (ALERT_MESSAGE && !$dialog) {
 {/if}
 
 <main>
-	{if empty($hide_title)}
+	{if empty($hide_title) && !$dialog}
 	<h1 class="main">{$title}</h1>
 	{/if}

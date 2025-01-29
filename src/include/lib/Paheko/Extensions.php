@@ -123,7 +123,7 @@ class Extensions
 
 			if (!$p->hasCode()) {
 				$p->set('enabled', false);
-				$p->save();
+				$p->save(false);
 				continue;
 			}
 
