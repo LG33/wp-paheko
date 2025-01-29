@@ -42,19 +42,6 @@ $selected_fee = $form('fee') != null ? current(array_filter($fees, fn($fee) => (
 
 $tpl->assign(compact('csrf_key', 'service', 'fields', 'fees'));
 
-/*$form->runIf('check', function () use ($tpl, $form, &$user, $service, $selected_fee) {
-    $login_field = DynamicFields::getLoginField();
-    $existing_user = Users::getFromLogin($form($login_field));
-    $exists = !empty($existing_user);
-    $tpl->assign('exists', $exists);
-
-    if ($exists) {
-        $user = $existing_user;
-    } else {
-        $user->{$login_field} = $form($login_field);
-    }
-});*/
-
 $form->runIf('validate', function () use ($tpl, $form, $user, $service, $selected_fee) {
     $user->selfCheck();
 
@@ -93,37 +80,36 @@ if (isset($_POST['success'])) {
 
     $checkout = API::getInstance()->getCheckout($checkout_id);
 
-    if (!isset($checkout) || !isset($checkout->order)) {
-        throw new UserException("Le paiement n'a pas été jusqu'au bout. Vous n'évez pas été débité.");
+    if (isset($checkout) && isset($checkout->order)) {
+        $user->setNumberIfEmpty();
+        $user->save();
+
+        $users = [$user->id => Users::getName($user->id)];
+        $service_user_form = [
+            'id_service' => $service_id,
+            'id_fee' => $selected_fee->id,
+            'amount' => $selected_fee->amount / 100,
+            'create_payment' => 1,
+            'account_selector' => $account,
+            'notes' => "Commande n° " . $checkout->order->id,
+            'paid' => 1,
+            'date' => new \DateTime
+        ];
+        Service_User::createFromForm($users, null, false, $service_user_form);
+
+        redirect($service_id, 'success', 2);
+    } else {
+        redirect($service_id, 'canceled', 2);
     }
-    //elseif ($status == 'success') {
-    $user->setNumberIfEmpty();
-    $user->save();
-
-    $users = [$user->id => Users::getName($user->id)];
-    $service_user_form = [
-        'id_service' => $service_id,
-        'id_fee' => $selected_fee->id,
-        'amount' => $selected_fee->amount / 100,
-        'create_payment' => 1,
-        'account_selector' => $account,
-        'notes' => "Commande n° " . $checkout->order->id,
-        'paid' => 1,
-        'date' => new \DateTime
-    ];
-    Service_User::createFromForm($users, null, false, $service_user_form);
-
-    Utils::redirect(Utils::getSelfURI(['service_id' => $service_id, 'status' => 'success']));
-} elseif (isset($_POST['canceled'])) {
-    throw new UserException("Le paiement n'a pas été jusqu'au bout. Vous n'évez pas été débité.");
-
-    /*$checkout_id = (int) $form('checkout_id');
-    $checkout = API::getInstance()->getCheckout($checkout_id);
-
-    $tpl->assign('checkout', $checkout);*/
-} elseif (isset($_POST['error'])) {
-    throw new UserException("Le paiement a échoué. Vous n'avez pas été débité. Si besoin, contactez l'association.");
 }
+
+if (isset($_POST['error'])) {
+    redirect($service_id, 'error', 2);
+} elseif (isset($_POST['canceled'])) {
+    redirect($service_id, 'canceled', 2);
+}
+
+$tpl->display(__DIR__ . '/../templates/register.tpl');
 
 function getUser($tpl, $form)
 {
@@ -145,4 +131,7 @@ function getUser($tpl, $form)
     return $user;
 }
 
-$tpl->display(__DIR__ . '/../templates/register.tpl');
+function redirect($service_id, $status, $step = 0)
+{
+    Utils::redirect(Utils::getSelfURI(['service_id' => $service_id, 'status' => $status, 'step' => $step]));
+}

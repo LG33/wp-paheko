@@ -43,6 +43,16 @@
 			{button type="submit" name="validate" label="Procéder au paiement" shape="right" class="main"}
 		</p>
 	</form>
+
+	{if $_GET.status == 'error'}
+		<p class="block error">
+			Le paiement a échoué. Vous n'avez pas été débité. Si besoin, contactez l'association.
+		</p>
+	{elseif $_GET.status == 'canceled'}
+		<p class="block error">
+			Le paiement n'a pas été jusqu'au bout. Vous n'évez pas été débité.
+		</p>
+	{/if}
 {else}
 	<form id="form" method="post" action="{$self_url}&step=2">
 		<fieldset>

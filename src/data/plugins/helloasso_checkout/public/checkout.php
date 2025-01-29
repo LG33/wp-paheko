@@ -66,7 +66,6 @@ if ($status == 'new') {
         $line->id_account = $accountId;
         $line->save();
 
-        //$transaction->setPaymentReference((string) $checkout->order->id);
         $transaction->type = 1;
         $transaction->notes = "Paiement réussi et vérifié (commande n°" . $checkout->order->id . ')';
         $transaction->save();

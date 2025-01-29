@@ -23,7 +23,8 @@
 		{/foreach}
 	</dl>
 	<div>
-		{button id="copy" label="Copier l'URL"}
+		{button id="copy-link" label="Copier l'URL"}
+		{button id="copy-code" label="Copier le code d'intégration (iframe)"}
 		{linkbutton id="open" href="#" target="blank" label="Ouvrir"}
 	</div>
 	<p class="help block">Conseil : raccourcissez l'URL en utilisant un outil tel que <a href="https://ouvaton.link/">ouvaton.link</a></p>
@@ -52,7 +53,8 @@ function getUrl() {
 	return `${baseUrl}register.php?service_id=${serviceId}${feesStr}`
 }
 $('#open').onmousedown = () => $('#open').setAttribute('href', getUrl());
-$('#copy').onclick = () => navigator.clipboard.writeText(getUrl());
+$('#copy-link').onclick = () => navigator.clipboard.writeText(getUrl());
+$('#copy-code').onclick = () => navigator.clipboard.writeText('<iframe src=' + getUrl() + ' frameborder=0 style="width: 100%;height: 2000px;max-width: 100%;"></iframe>');
 {/literal}
 </script>
 
