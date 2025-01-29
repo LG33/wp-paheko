@@ -291,19 +291,10 @@ class DB extends SQLite3
 
 		if ($action === \SQLite3::PRAGMA) {
 			// Only allow some PRAGMA statements
-			static $allowed = [
-			'integrity_check',
-			'foreign_key_check',
-			'application_id',
-			'user_version',
-			'compile_options',
-			'legacy_alter_table',
-			'foreign_keys',
-			'query_only',
-			'index_list',
-			'foreign_key_list',
-			'table_info',
-			'index_xinfo',
+			static $allowed = ['integrity_check', 'foreign_key_check', 'application_id',
+				'user_version', 'compile_options', 'legacy_alter_table', 'foreign_keys',
+				'query_only', 'index_list', 'foreign_key_list', 'table_info',
+				'index_xinfo',
 			];
 
 			if (!in_array($args[0], $allowed, true)) {
@@ -410,18 +401,12 @@ class DB extends SQLite3
 	static public function getVersion($db)
 	{
 		$v = (int) $db->querySingle('PRAGMA user_version;');
-		$v = self::parseVersion($v);
 
-		if (null === $v) {
-			try {
-				// For legacy version before 1.1.0
-				$v = $db->querySingle('SELECT valeur FROM config WHERE cle = \'version\';');
-			} catch (\Exception $e) {
-				throw new \RuntimeException('Cannot find application version', 0, $e);
-			}
+		if (empty($v)) {
+			throw new \LogicException('Cannot find application version');
 		}
 
-		return $v ?: null;
+		return self::parseVersion($v);
 	}
 
 	static public function parseVersion(int $v): ?string

@@ -90,7 +90,7 @@ class Plugin extends Entity
 				sprintf('This restricted access level doesn\'t exist for this section: %s', $this->restrict_level));
 		}
 
-		$this->assert(Plugins::isAllowed($this->name), 'Cette extension est désactivée par l\'hébergeur.');
+		$this->assert(Plugins::isAllowed($this->name), 'Cette extension est désactivée par l\'hébergeur');
 	}
 
 	public function setBrokenMessage(string $str)
@@ -432,6 +432,10 @@ class Plugin extends Entity
 		if (0 === strpos($uri, 'admin/')) {
 			if (!$session->isLogged()) {
 				Utils::redirect('!login.php');
+			}
+
+			if ($uri === 'admin/config.php') {
+				$session->requireAccess($session::SECTION_CONFIG, $session::ACCESS_ADMIN);
 			}
 
 			// Restrict access

@@ -10,6 +10,7 @@ use Paheko\Utils;
 use Paheko\ValidationException;
 use Paheko\Users\DynamicFields;
 use Paheko\Users\Session;
+use Paheko\Users\Users;
 use Paheko\Entities\Users\DynamicField;
 use Paheko\Entities\Users\User;
 use Paheko\Files\Conversion;
@@ -36,6 +37,7 @@ class CommonFunctions
 		'edit_user_field',
 		'user_field',
 		'tag',
+		'dropdown',
 	];
 
 	static public function input(array $params)
@@ -299,8 +301,8 @@ class CommonFunctions
 		elseif ($type === 'select_groups') {
 			$input = sprintf('<select %s>', $attributes_string);
 
-			if (empty($attributes['required'])) {
-				$input .= '<option value=""></option>';
+			if (empty($attributes['required']) || isset($attributes['default_empty'])) {
+				$input .= sprintf('<option value="">%s</option>', $attributes['default_empty'] ?? '');
 			}
 
 			foreach ($options as $optgroup => $suboptions) {
@@ -375,7 +377,7 @@ class CommonFunctions
 			}
 
 			$currency = Config::getInstance()->currency;
-			$input = sprintf('<nobr><input type="text" pattern="-?[0-9]+([.,][0-9]{1,2})?" inputmode="decimal" size="8" %s value="%s" /><b>%s</b></nobr>', $attributes_string, htmlspecialchars((string) $current_value), $currency);
+			$input = sprintf('<nobr><input type="text" pattern="\s*-?[0-9 ]+([.,][0-9]{1,2})?\s*" inputmode="decimal" size="8" %s value="%s" /><b>%s</b></nobr>', $attributes_string, htmlspecialchars((string) $current_value), $currency);
 		}
 		else {
 			$value = isset($attributes['value']) ? '' : sprintf(' value="%s"', htmlspecialchars((string)$current_value));
@@ -504,7 +506,8 @@ class CommonFunctions
 
 		$params = implode(' ', $params);
 
-		$label = $label ? sprintf('<span>%s</span>', htmlspecialchars($label)) : '';
+		$label = (string)$label;
+		$label = $label === '' ? '' : sprintf('<span>%s</span>', htmlspecialchars((string) $label));
 
 		return sprintf('<a href="%s" %s>%s%s</a>', htmlspecialchars($href), $params, $prefix, $label);
 	}
@@ -787,8 +790,8 @@ class CommonFunctions
 			$params['label'] = 'Oui';
 			$params['prefix_title'] = $field->label;
 		}
-		elseif ($field->system & $field::NUMBER && $context === 'admin_new') {
-			$params['default'] = DB::getInstance()->firstColumn(sprintf('SELECT MAX(%s) + 1 FROM %s;', $name, User::TABLE));
+		elseif ($field->isNumber() && $field->type === 'number' && $context === 'admin_new') {
+			$params['default'] = Users::getNewNumber();
 			$params['required'] = false;
 		}
 		elseif ($type === 'number') {
@@ -809,11 +812,13 @@ class CommonFunctions
 			$params['data-default-country'] = Config::getInstance()->get('country');
 		}
 
-		if ($field->default_value === 'NOW()') {
-			$params['default'] = new \DateTime;
-		}
-		elseif (!empty($field->default_value)) {
-			$params['default'] = $field->default_value;
+		if ($context === 'admin_new') {
+			if ($field->default_value === 'NOW()') {
+				$params['default'] = new \DateTime;
+			}
+			elseif (!empty($field->default_value)) {
+				$params['default'] = $field->default_value;
+			}
 		}
 
 		$out = CommonFunctions::input($params);
@@ -822,10 +827,13 @@ class CommonFunctions
 			$out .= '<dd class="help"><small>(Sera utilisé comme identifiant de connexion si le membre a le droit de se connecter.)</small></dd>';
 		}
 
-		if ($context === 'admin_new' && $field->system & $field::NUMBER) {
+		if ($context === 'admin_new'
+			&& $field->isNumber()
+			&& $field->type === 'number') {
 			$out .= '<dd class="help"><small>Doit être unique, laisser vide pour que le numéro soit attribué automatiquement.</small></dd>';
 		}
-		elseif ($context === 'admin_edit' && $field->system & $field::NUMBER) {
+		elseif (($context === 'admin_edit' || $context === 'admin_new')
+			&& $field->isNumber()) {
 			$out .= '<dd class="help"><small>Doit être unique pour chaque membre.</small></dd>';
 		}
 
@@ -938,6 +946,45 @@ class CommonFunctions
 			$out = sprintf('<a href="%s">%s</a>', Utils::getLocalURL('!users/details.php?id=' . (int)$params['link_name_id']), $out);
 		}
 
+		return $out;
+	}
+
+	static public function dropdown(array $params): string
+	{
+		if (!isset($params['options'], $params['title'])) {
+			throw new \InvalidArgumentException('Missing parameter for "dropdown"');
+		}
+
+		$out = sprintf('<nav class="dropdown" aria-role="listbox" aria-expanded="false" tabindex="0" title="%s"><ul>',
+			htmlspecialchars($params['title']));
+
+		foreach ($params['options'] as $option) {
+			$selected = '';
+			$link = '';
+			$aside = '';
+			$content = $option['html'] ?? ($option['label'] ?? null);
+
+			if (null === $content) {
+				throw new \InvalidArgumentException('dropdown: missing "html" or "label" parameter for option: ' . json_encode($option));
+			}
+
+			if (isset($option['aside'])) {
+				$aside = sprintf('<small>%s</small>', htmlspecialchars($option['aside']));
+			}
+
+			if (isset($option['value']) && $option['value'] == $params['value']) {
+				$selected = 'aria-selected="true" class="selected"';
+			}
+
+			if (isset($option['href'])) {
+				$content = sprintf('<a href="%s"><strong>%s</strong> %s</a>', htmlspecialchars($option['href']), $content, $aside);
+				$aside = '';
+			}
+
+			$out .= sprintf('<li %s aria-role="option">%s%s</li>', $selected, $content, $aside);
+		}
+
+		$out .= '</ul></nav>';
 		return $out;
 	}
 
