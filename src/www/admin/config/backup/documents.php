@@ -4,6 +4,7 @@ namespace Paheko;
 use Paheko\Web\Web;
 use Paheko\Files\Files;
 use Paheko\Entities\Files\File;
+use Paheko\Users\Session;
 
 require_once __DIR__ . '/../_inc.php';
 
@@ -15,7 +16,7 @@ $form->runIf('restore', function () {
 			file_put_contents($f, gzinflate(file_get_contents($f), 1024*1024*1024));
 		}
 
-		Files::upload(Utils::dirname(f('target')), 'file1');
+		Files::upload(Utils::dirname(f('target')), 'file1', Session::getInstance());
 	}
 	catch (UserException $e) {
 		die(json_encode(['success' => false, 'error' => f('target') . ': '. $e->getMessage()]));

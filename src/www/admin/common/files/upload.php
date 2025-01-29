@@ -3,6 +3,7 @@ namespace Paheko;
 
 use Paheko\Entities\Files\File;
 use Paheko\Files\Files;
+use Paheko\Users\Session;
 
 require __DIR__ . '/../../_inc.php';
 
@@ -15,7 +16,7 @@ if (!File::canCreate($parent)) {
 $csrf_key = 'upload_file_' . md5($parent);
 
 $form->runIf('upload', function () use ($parent) {
-	Files::uploadMultiple($parent, 'file');
+	Files::uploadMultiple($parent, 'file', Session::getInstance());
 }, $csrf_key, '!docs/?path=' . $parent);
 
 $max = (int) qg('max');

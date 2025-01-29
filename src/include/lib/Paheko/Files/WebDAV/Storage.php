@@ -101,6 +101,32 @@ class Storage extends AbstractStorage
 	 */
 	public function get(string $uri): ?array
 	{
+		$file = $this->getFile($uri);
+
+		if (!$file) {
+			return null;
+		}
+
+		$file->serve();
+		return ['stop' => true];
+	}
+
+	/**
+	 * @extends
+	 */
+	public function fetch(string $uri): ?string
+	{
+		$file = $this->getFile($uri);
+
+		if (!$file) {
+			return null;
+		}
+
+		return $file->fetch();
+	}
+
+	protected function getFile(string $uri): ?File
+	{
 		$file = $this->load($uri);
 
 		if (!$file) {
@@ -118,8 +144,7 @@ class Storage extends AbstractStorage
 			return null;
 		}
 
-		$file->serve();
-		return ['stop' => true];
+		return $file;
 	}
 
 	/**
@@ -299,7 +324,7 @@ class Storage extends AbstractStorage
 		rewind($pointer);
 
 		if ($new) {
-			Files::createFromPointer($uri, $pointer);
+			Files::createFromPointer($uri, $pointer, $this->session);
 		}
 		else {
 			$target->store(compact('pointer'));

@@ -236,13 +236,13 @@ class DB extends PDO_DB
 		$this->_install_check = !$disable;
 	}
 
-	public function connect(): void
+	public function connect(bool $check_installed = true): void
 	{
 		if (null !== $this->db) {
 			return;
 		}
 
-		if ($this->_install_check && !self::isInstalled()) {
+		if ($check_installed && $this->_install_check && !self::isInstalled()) {
 			throw new \LogicException('Database has not been installed!');
 		}
 
@@ -269,7 +269,43 @@ class DB extends PDO_DB
 			));
 		}
 
-		self::registerCustomFunctions($this);
+		self::registerCustomFunctions($this->db);
+		self::toggleAuthorizer($this->db, true);
+	}
+
+	static public function toggleAuthorizer($db, bool $enable): void
+	{
+		if (!method_exists($db, 'setAuthorizer')) {
+			return;
+		}
+
+		$db->setAuthorizer($enable ? [self::class, 'safetyAuthorizer'] : null);
+	}
+
+	/**
+	 * Basic authorizer to make sure dangerous functions cannot be used:
+	 * ATTACH, PRAGMA
+	 */
+	static public function safetyAuthorizer(int $action, ...$args)
+	{
+		if ($action === \SQLite3::ATTACH) {
+			return \SQLite3::DENY;
+		}
+
+		if ($action === \SQLite3::PRAGMA) {
+			// Only allow some PRAGMA statements
+			static $allowed = ['integrity_check', 'foreign_key_check', 'application_id',
+				'user_version', 'compile_options', 'legacy_alter_table', 'foreign_keys',
+				'query_only', 'index_list', 'foreign_key_list', 'table_info',
+				'index_xinfo',
+			];
+
+			if (!in_array($args[0], $allowed, true)) {
+				return \SQLite3::DENY;
+			}
+		}
+
+		return \SQLite3::OK;
 	}
 
 	static public function registerCustomFunctions($db)
@@ -343,6 +379,7 @@ class DB extends PDO_DB
 		});
 
 		$db->createCollation('U_NOCASE', [Utils::class, 'unicodeCaseComparison']);
+		$db->createCollation('NAT_NOCASE', 'strnatcasecmp');
 	}
 
 	public function toggleUnicodeLike(bool $enable): void
@@ -369,20 +406,13 @@ class DB extends PDO_DB
 
 	static public function getVersion($db)
 	{
-		$v = (int) $db->query('PRAGMA user_version;')->fetchColumn();
-		$v = self::parseVersion($v);
+		$v = (int) $db->querySingle('PRAGMA user_version;');
 
-		if (null === $v) {
-			try {
-				// For legacy version before 1.1.0
-				$v = $db->query('SELECT valeur FROM config WHERE cle = \'version\';')->fetchColumn();
-			}
-			catch (\Exception $e) {
-				throw new \RuntimeException('Cannot find application version', 0, $e);
-			}
+		if (empty($v)) {
+			throw new \LogicException('Cannot find application version');
 		}
 
-		return $v ?: null;
+		return self::parseVersion($v);
 	}
 
 	static public function parseVersion(int $v): ?string

@@ -50,7 +50,7 @@
 		let s = document.querySelector('#f_from_year');
 		const checkOpen = function() {
 			let v = s.options[s.selectedIndex].dataset.open;
-			g.toggle('.warn-not-closed', v === '' ? true : false);
+			g.toggle('.warn-not-closed', v === 'open' ? true : false);
 		};
 		s.onchange = checkOpen;
 		checkOpen();
@@ -90,7 +90,7 @@
 						</td>
 					{/if}
 					<th>
-						{input type="list" target="!acc/charts/accounts/selector.php?chart=%d"|args:$year.id_chart name="lines[account_selector][]" default=$line.account_selector}
+						{input type="list" target="!acc/charts/accounts/selector.php?id_chart=%d"|args:$year.id_chart name="lines[account_selector][]" default=$line.account_selector}
 					</th>
 					<td>{input type="money" name="lines[debit][]" default=$line.debit size=5}</td>
 					<td>{input type="money" name="lines[credit][]" default=$line.credit size=5}</td>
@@ -123,7 +123,7 @@
 		{if null === $previous_year}
 			{button type="submit" name="next" label="Continuer" shape="right" class="main"}
 			— ou —
-			{linkbutton shape="reset" href="!acc/years/" label="Passer cet étape"}
+			{linkbutton shape="reset" href="!acc/years/" label="Passer cette étape"}
 			<br />
 			<i class="help">(Il sera toujours possible de reprendre la balance d'ouverture plus tard.)</i>
 		{else}
