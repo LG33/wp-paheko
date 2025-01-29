@@ -289,7 +289,7 @@ class Session extends \KD2\UserSession
 				  return true;
 			  }
 
-		return parent::start($write);
+		return parent::start($write);*/
 	}
 
 	public function forceLogin($login, bool $allow_new_session = true): bool
