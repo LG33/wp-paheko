@@ -2,9 +2,7 @@
 
 namespace Paheko;
 
-use KD2\HTTP;
 use Paheko\Utils;
-use Paheko\Users\Session;
 
 require_once __DIR__ . '/_inc.php';
 
@@ -18,9 +16,8 @@ foreach ($pages as $key => &$page) {
 
 if (!$_GET || !$_GET['id']) {
 	Utils::redirect('?id=' . $pages[0]->ID);
-	return;
 }
 
-$tpl->assign($pages, 'pages');
+$tpl->assign('pages', $pages);
 
 $tpl->display('web/index.tpl');

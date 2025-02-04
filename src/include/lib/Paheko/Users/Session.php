@@ -412,7 +412,7 @@ class Session extends \KD2\UserSession
 		$this->_permissions = null;
 		$this->_files_permissions = null;
 
-		return parent::logout();
+		//return parent::logout();
 	}
 
 	public function recoverPasswordSend(string $login): void
