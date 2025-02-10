@@ -673,6 +673,7 @@ dialog.datepicker {
     box-shadow: none;
     border-radius: .2rem;
     margin: 0;
+    color: black;
 }
 
 .datepicker tbody td.focus input {

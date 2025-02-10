@@ -172,7 +172,7 @@ main h1.main {
     display: block;
 }
 
-#menu li.current h3 a, #menu ul ul li.current a {
+#menu li.current h3 a, #menu ul ul li.current a, #menu li.current_parent h3 a, #menu ul ul li.current_parent a  {
     background: rgb(var(--gMainColor));
     color: rgb(var(--gBgColor));
 }
@@ -200,7 +200,7 @@ main h1.main {
     text-align: center;
 }
 
-#menu li.current h3 span[data-icon]::before {
+#menu li.current h3 span[data-icon]::before, #menu li.current_parent h3 span[data-icon]::before {
     color: rgb(var(--gBgColor));
 }
 

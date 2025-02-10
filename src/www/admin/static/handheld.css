@@ -69,6 +69,12 @@ nav.breadcrumbs ul {
 	right: 0;
 }
 
+@media only screen and (max-height: 500px){
+    #menu {
+        display: none;
+    }
+}
+
 #menu .logo {
 	display: none;
 }
@@ -106,12 +112,13 @@ nav.breadcrumbs ul {
 	font-weight: normal;
 	padding: 0.6em 0 0.4em 0;
 	display: block;
-	clip-path: circle(3.3em);
+	clip-path: circle(12.5vw);
+	background: none;
 }
 
 #menu h3 span[data-icon]::before {
-	float: none;
-	display: block;
+	/* float: none; */
+	display: inline-block;
 	position: relative;
 	right: 0;
 	margin: 0;
@@ -122,10 +129,6 @@ nav.breadcrumbs ul {
 	top: 0;
 	text-shadow: none;
 	left: 0;
-}
-
-#menu li.current_parent h3 a, #menu li.current h3 a {
-	background: rgb(var(--gMainColor));
 }
 
 /*#menu li.current h3 span[data-icon]::before,
@@ -160,7 +163,7 @@ nav.breadcrumbs ul {
 	font-weight: normal;
 }
 
-#menu > ul > li > ul li.current a {
+#menu > ul > li > ul li.current a, #menu > ul > li > ul li.current_parent a {
 	background: rgb(var(--gMainColor));
 	color: rgb(var(--gBgColor));
 }
@@ -190,7 +193,7 @@ nav.tabs ul li a {
 	padding: .4rem .6rem;
 }
 
-nav.tabs ul li.current a {
+nav.tabs ul li.current a, nav.tabs ul li.current_parent a {
 	font-size: 1em;
 }
 
@@ -264,7 +267,7 @@ table.files.gallery tbody {
 	justify-content: center;
 }
 
-/* Petits écrans (smartphones) */
+/* Petits Ã©crans (smartphones) */
 @media screen and (max-width:600px) {
 	.transaction-details {
 		flex-direction: column;
@@ -324,7 +327,7 @@ table.files.gallery tbody {
 	}
 
 	colgroup {
-		/* Hack pour désactiver les largeurs de colonnes */
+		/* Hack pour dÃ©sactiver les largeurs de colonnes */
 		display: none;
 	}
 

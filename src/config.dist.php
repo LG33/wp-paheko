@@ -86,7 +86,7 @@ namespace Paheko;
  * @var  string
  */
 
-const ROOT = __DIR__;
+//const ROOT = __DIR__;
 
 /**
  * Répertoire où sont situées les données de Paheko
@@ -96,7 +96,7 @@ const ROOT = __DIR__;
  * @var  string
  */
 
-const DATA_ROOT = ROOT . '/data';
+//const DATA_ROOT = ROOT . '/data';
 
 /**
  * Répertoire où est situé le cache,
@@ -147,7 +147,7 @@ const DATA_ROOT = ROOT . '/data';
  * @var  string
  */
 
-const DB_FILE = DATA_ROOT . '/db/association.sqlite';
+//const DB_FILE = DATA_ROOT . '/association.sqlite';
 
 /**
  * Emplacement de stockage des plugins
