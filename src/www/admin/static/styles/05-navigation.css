@@ -215,7 +215,7 @@ nav.dropdown {
     border: 1px solid rgb(var(--gMainColor));
     border-radius: 1em;
     z-index: 100;
-    overflow: hidden;
+    transition: 1s;
 }
 
 nav.dropdown ul {
@@ -248,6 +248,7 @@ nav.dropdown li {
 
 html.js nav.dropdown:not(.open) {
     cursor: pointer;
+    overflow: hidden;
 }
 
 nav.dropdown li.selected, html.nojs nav.dropdown:hover li, nav.dropdown.open li {
@@ -294,12 +295,13 @@ nav.dropdown.open li:nth-child(even) a {
 }
 
 nav.dropdown.open ul {
-    box-shadow: 0 0 5px .2rem rgba(var(--gMainColor), 0.5);
-    border-radius: .25rem;
+    /*box-shadow: 0 0 5px .2rem rgba(var(--gMainColor), 0.5);*/
+    border-radius: 1em;
+    border: 1px solid rgb(var(--gMainColor));
 }
 
 nav.dropdown.open .selected a {
-    box-shadow: 0 0 5px .2rem rgba(var(--gMainColor), 0.5);
+    /*box-shadow: 0 0 5px .2rem rgba(var(--gMainColor), 0.5);*/
     color: rgb(var(--gHoverLinkColor));
 }
 

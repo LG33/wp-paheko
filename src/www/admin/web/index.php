@@ -10,12 +10,16 @@ $session->requireAccess($session::SECTION_WEB, $session::ACCESS_WRITE);
 
 $pages = get_pages();
 
-foreach ($pages as $key => &$page) {
-	$page->post_title = html_entity_decode($page->post_title);
-}
-
 if (!$_GET || !$_GET['id']) {
 	Utils::redirect('?id=' . $pages[0]->ID);
+}
+
+foreach ($pages as $key => &$page) {
+	$page = [
+		'label' => html_entity_decode($page->post_title),
+		'value' => $page->ID,
+		'href' => '?id=' . $page->ID,
+	];
 }
 
 $tpl->assign('pages', $pages);
