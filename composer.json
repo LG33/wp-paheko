@@ -49,7 +49,7 @@
   ],
   "require": {
     "php": ">=7.3",
-    "kd2/kd2fw": "^7.2",
+    "kd2/kd2fw": "^7.3",
     "paheko/paheko-modules": "^1.3",
     "lg33/paheko-plugins": "^1.3"
   },
