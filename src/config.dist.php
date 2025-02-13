@@ -467,7 +467,7 @@ namespace Paheko;
  * @var bool
  */
 
-//const ENABLE_UPGRADES = true;
+const ENABLE_UPGRADES = false;
 
 /**
  * Utilisation de cron pour les tâches automatiques

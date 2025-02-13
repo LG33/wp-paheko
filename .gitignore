@@ -9,3 +9,4 @@ src/include/dependencies.list
 src/modules
 src/www/admin/static/mini.css
 build
+.vscode
