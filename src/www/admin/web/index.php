@@ -22,6 +22,12 @@ foreach ($pages as $key => &$page) {
 	];
 }
 
+$pages[] = [
+	'label' => "Créer une nouvelle page",
+	'value' => 'new',
+	'href' => '?id=new',
+];
+
 $tpl->assign('pages', $pages);
 
 $tpl->display('web/index.tpl');

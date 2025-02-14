@@ -4,7 +4,7 @@
 
 <div style="display: flex;align-items: center;gap: 0.6em;">
 	<h4>Page à modifier :</h4>
-	{dropdown value=$_GET.id options=$pages title="Sélectionner une page à modifier" style="flex: 1"}
+	<div style="flex: 1">{dropdown value=$_GET.id options=$pages title="Sélectionner une page à modifier"}</div>
 	<a href={$wp_admin_url} target="_blank" data-icon="🌐" class="icn-btn"><span>Ouvrir Wordpress</span></a>
 </div>
 
