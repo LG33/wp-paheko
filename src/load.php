@@ -93,7 +93,7 @@ function wp_paheko_init($plugin)
 		require_once __DIR__ . '/www/_route.php';
 		exit();
 	} elseif (strpos($uri, '/admin') === 0 || strpos($uri, '/documents') === 0 || strpos($uri, '/config') === 0 || strpos($uri, '/transaction') === 0) {
-		if(!empty($_POST)) $_POST = array_map('stripslashes', $_POST);
+		if(!empty($_POST)) $_POST = wp_unslash( $_POST );
 
 		$explode = explode('.', $uri);
 		
