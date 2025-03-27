@@ -76,8 +76,29 @@ function wp_paheko_adminbar_item($admin_bar)
 }
 add_action('admin_bar_menu', 'wp_paheko_adminbar_item', 999);
 
+function wp_paheko_cron_exec()
+{
+	require_once __DIR__ . '/config.local.php';
+
+	if(!defined('Paheko\ROOT')) define('Paheko\ROOT', __DIR__);
+	if(!defined('Paheko\DATA_ROOT')) define('Paheko\DATA_ROOT', Paheko\ROOT . '/data');
+	if(!defined('Paheko\CACHE_ROOT')) define('Paheko\CACHE_ROOT', Paheko\DATA_ROOT . '/cache');
+	if(!defined('Paheko\USE_CRON')) define('Paheko\USE_CRON', false);
+
+	if (!Paheko\USE_CRON && @filemtime(Paheko\CACHE_ROOT . '/last_cron_run') < (time() - 24*3600)) {
+		touch(Paheko\CACHE_ROOT . '/last_cron_run');
+		require_once __DIR__ . '/include/lib/Paheko/CLI.php';
+		(new Paheko\CLI)->cron();
+	}
+}
+add_action( 'wp_paheko_cron_hook', 'wp_paheko_cron_exec' );
+
 function wp_paheko_init($plugin)
 {
+	if(!wp_next_scheduled( 'wp_paheko_cron_hook' )) {
+		wp_schedule_event( time(), 'daily', 'wp_paheko_cron_hook' );
+	}
+
 	if (!function_exists('dd')) {
 		function dd($arg)
 		{
@@ -132,3 +153,9 @@ function wp_paheko_init($plugin)
 	}
 }
 add_action('init', 'wp_paheko_init');
+
+function wp_paheko_deactivate() {
+    $timestamp = wp_next_scheduled( 'wp_paheko_cron_hook' );
+    wp_unschedule_event( $timestamp, 'wp_paheko_cron_hook' );
+}
+register_deactivation_hook( __FILE__, 'wp_paheko_deactivate' ); 
