@@ -16,7 +16,7 @@ use Paheko\Files\Files;
 use Paheko\Entities\Files\File;
 use Paheko\Web\Router;
 
-use const Paheko\{LOCAL_SECRET_KEY};
+use const Paheko\{LOCAL_SECRET_KEY, WWW_URL};
 
 class Storage extends AbstractStorage
 {
@@ -206,14 +206,20 @@ class Storage extends AbstractStorage
 				return $this->nextcloud->getDirectDownloadURL($uri, $this->session::getUserId());
 			case NextCloud::PROP_NC_RICH_WORKSPACE:
 				return '';
+			// fileId is required by NextCloud desktop client
+			case NextCloud::PROP_OC_FILEID:
+				$id = $file->id;
+				// Root directory doesn't have a ID, give something random instead
+				$id ??= 10000000;
+				return $id;
 			case NextCloud::PROP_OC_ID:
-				// fileId is required by NextCloud desktop client
-				if (!isset($file->id)) {
-					// Root directory doesn't have a ID, give something random instead
-					return 10000000;
-				}
+				$id = $file->id;
+				// Root directory doesn't have a ID, give something random instead
+				$id ??= 10000000;
 
-				return $file->id;
+				// ID = fileid (padded with zeros to be at least 8 characters long) + instanceid
+				$id = str_pad((string)$id, 8, '0', STR_PAD_LEFT) . sha1(WWW_URL);
+				return $id;
 			case NextCloud::PROP_OC_PERMISSIONS:
 				$permissions = [
 					NextCloud::PERM_READ => $file->canRead($this->session),
@@ -252,7 +258,14 @@ class Storage extends AbstractStorage
 		}
 
 		if (null === $properties) {
-			$properties = array_merge(WebDAV::BASIC_PROPERTIES, ['DAV::getetag', NextCloud::PROP_OC_ID]);
+			$properties = array_merge(WebDAV::BASIC_PROPERTIES, ['DAV::getetag', NextCloud::PROP_OC_ID, NextCloud::PROP_OC_FILEID]);
+		}
+
+		// Make sure resourcetype is always included, even if not requested,
+		// this ensures directory URLs are correct
+		// see https://github.com/kd2org/karadav/pull/91
+		if (!in_array('DAV::resourcetype', $properties)) {
+			$properties[] = 'DAV::resourcetype';
 		}
 
 		$out = [];
@@ -324,7 +337,7 @@ class Storage extends AbstractStorage
 		rewind($pointer);
 
 		if ($new) {
-			Files::createFromPointer($uri, $pointer);
+			Files::createFromPointer($uri, $pointer, $this->session);
 		}
 		else {
 			$target->store(compact('pointer'));
@@ -415,7 +428,7 @@ class Storage extends AbstractStorage
 			throw new WebDAV_Exception('Impossible de créer un répertoire ici', 403);
 		}
 
-		if (!File::canCreateDir($uri)) {
+		if (!File::canCreateDir($uri, $this->session)) {
 			throw new WebDAV_Exception('Vous n\'avez pas l\'autorisation de créer un répertoire ici', 403);
 		}
 
@@ -484,6 +497,7 @@ class Storage extends AbstractStorage
 			WOPI::PROP_READ_ONLY   => (bool) $readonly,
 			WOPI::PROP_USER_NAME   => $user ? $user->name() : 'Anonyme',
 			WOPI::PROP_USER_ID     => $user ? $user->id() : null,
+			WOPI::PROP_OWNER_ID    => $user ? $user->id() : null,
 			WOPI::PROP_USER_AVATAR => $user ? $user->avatar_url() : null,
 			WOPI::PROP_LAST_MODIFIED => $file->modified,
 		];

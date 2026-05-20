@@ -154,12 +154,26 @@ Affiche un message d'erreur et arrête le traitement à cet endroit.
 | Paramètre | Optionnel / obligatoire ? | Fonction |
 | :- | :- | :- |
 | `message` | **obligatoire** | Message d'erreur à afficher |
+| `code` | facultatif | Code d'erreur HTTP à utiliser |
 
 Exemple :
 
 ```
 {{if $_POST.nombre != 42}}
 	{{:error message="Le nombre indiqué n'est pas 42"}}
+{{/if}}
+```
+
+## exit
+
+Arrête l'exécution du code immédiatement.
+
+Utile pour le debug principalement :
+
+```
+{{if $condition == 1}}
+  {{:debug a=42}}
+  {{:exit}}
 {{/if}}
 ```
 
@@ -478,13 +492,14 @@ Mais cette fonction permet également d'appeler une API Paheko distante, dans ce
 
 ## csv
 
-Permet de demander à l'utilisateur de charger un fichier CSV (ou XLSX/ODS, selon la configuration de Paheko), et ensuite d'associer les colonnes pour permettre d'utiliser ces données dans une boucle.
+Permet de demander à l'utilisateur de charger un fichier CSV, XLSX (Excel) ou ODS (LibreOffice), et ensuite d'associer les colonnes pour permettre d'utiliser ces données dans une boucle.
 
 | Paramètre | Obligatoire ou optionnel ? | Fonction |
 | :- | :- | :- |
 | action | obligatoire | Action à réaliser : `initialize`, `form`, `cancel_button`, `clear` |
 | name | optionnel | Définit le nom du fichier, utile s'il y a plusieurs fichiers CSV dans le même module. |
 | assign | optionnel | Assigner le tableau indiquant les informations du fichier CSV à la variable donnée en valeur. |
+| file | optionnel | Si ce paramètre est renseigné, le fichier correspondant sera chargé depuis les documents, sinon un formulaire d'upload sera proposé. |
 
 Paramètres pour l'action `initialize` :
 
@@ -528,6 +543,7 @@ La variable `$csv` contiendra ensuite les informations sur le fichier CSV actuel
 * `loaded` (booléen) : vaut `true` quand le fichier est chargé
 * `columns` (tableau) : les colonnes, définies dans l'appel avec l'action `initialize`
 * `mandatory_columns` (tableau) : les colonnes requises, définies dans l'appel avec l'action `initialize`
+* `file_name` (texte) : le nom du fichier uploadé
 
 Les clés suivantes ne sont renseignées que quand `ready` vaut `true` :
 
@@ -582,6 +598,22 @@ Note : il est possible de combiner l'usage de la fonction `csv` avec le paramèt
 {{/if}}
 ```
 
+### Chargement d'un fichier local
+
+Si le paramètre `file` n'est pas spécifié, un formulaire d'envoi de fichier sera affiché. S'il est renseigné avec le chemin vers un fichier stocké dans Paheko, c'est ce fichier qui sera chargé en mémoire lors de l'exécution de l'action `initialize`. Exemple :
+
+```
+{{:csv action="initialize" file="documents/test.ods" columns=$columns assign="csv"}}
+
+{{if !$csv.ready}}
+  {{:csv action="form"}}
+{{else}}
+  {{:debug csv=$csv}}
+{{/if}}
+```
+
+Comme le fichier est chargé en mémoire lors de la première exécution de l'action `initialize`, si le fichier est modifié après cette première exécution, les modifications ne seront pas visibles. Il faut donc exécuter `{{:csv action="clear"}}` pour pouvoir "recharger" le fichier en mémoire à partir des documents.
+
 ## signature
 
 Affiche la signature de l'association (en HTML), ou son logo si aucune signature n'a été choisie.
@@ -600,9 +632,12 @@ Enregistre des données, sous la forme d'un document, dans la base de données, 
 | `validate_only` | optionnel | Liste des paramètres à valider (par exemple pour ne faire qu'une mise à jour partielle), séparés par des virgules. |
 | `assign_new_id` | optionnel | Si renseigné, le nouveau numéro unique du document sera indiqué dans cette variable. |
 | `from` | optionnel | Si renseigné avec un tableau, chaque entrée du tableau sera traitée comme un élément à enregistrer. |
+| `replace` | optionnel | (Booléen) Si ce paramètre vaut `true`, alors le contenu du document sera écrasé, au lieu d'être fusionné. |
 | … | optionnel | Autres paramètres : traités comme des valeurs à enregistrer dans le document |
 
 Si ni `key` ni `id` ne sont indiqués, un nouveau document sera créé avec un nouveau numéro (ID) unique.
+
+### Mise à jour
 
 Si le document indiqué existe déjà, il sera mis à jour. Les valeurs nulles (`NULL`) seront effacées.
 
@@ -622,12 +657,32 @@ Exemple de mise à jour :
 {{:save key="facture_43" montant=300}}
 ```
 
+Seul le montant sera modifié, le nom ne sera pas modifié.
+
+Par contre en utilisant le paramètre `replace`, le document sera écrasé :
+
+```
+{{:save key="facture_43" replace=true nom="Vente de vélo"}}
+```
+
+Donnera :
+
+```
+{"nom": "Vente de vélo"}
+```
+
+Le montant est donc supprimé.
+
+### Récupérer l'identifiant du document ajouté
+
 Exemple de récupération du nouvel ID :
 
 ```
 {{:save titre="Coucou !" assign_new_id="id"}}
 Le document n°{{$id}} a bien été enregistré.
 ```
+
+### Enregistrer plusieurs documents en une fois
 
 Le paramètre `from` est équivalent à appeler la fonction `save` dans une boucle. Ainsi au lieu de :
 
@@ -980,7 +1035,7 @@ Par défaut, tous les fichiers des modules sont en accès restreint : ils ne peu
 
 Pour qu'un fichier soit visible publiquement aux personnes non connectées, il faut le placer dans le sous-répertoire `public` du module.
 
-Attention : de par ce fonctionnement, **tous les fichiers** d'un module sont potentiellement accessibles par **tous les membres ayant accès au module** et connaissant le nom du fichier.
+Attention : de par ce fonctionnement, **tous les fichiers** d'un module sont potentiellement accessibles par **tous les membres ayant accès au module** et connaissant le nom du fichier, indépendamment des fonctions `admin_files` et `delete_file` !
 
 Il est donc recommandé de ne pas utiliser ce mécanisme pour stocker des données personnelles ou des données sensibles.
 
@@ -991,8 +1046,8 @@ Affiche (dans le contexte de l'administration) la liste des fichiers dans un sou
 | Paramètre | Obligatoire ou optionnel ? | Fonction |
 | :- | :- | :- |
 | `path` | optionnel | Chemin du sous-répertoire où sont stockés les fichiers |
-| `upload` | optionnel | Booléen. Si `true`, l'utilisateur pourra ajouter des fichiers. (Défaut : `false`) |
-| `edit` | optionnel | Booléen. Si `true`, l'utilisateur pourra modifier ou supprimer les fichiers existants. (Défaut : `false`) |
+| `upload` | optionnel | Booléen. Si `true`, le bouton pour ajouter des fichiers sera affiché. (Défaut : `false`) |
+| `edit` | optionnel | Booléen. Si `true`, le bouton pour modifier ou supprimer les fichiers existants sera affiché. (Défaut : `false`) |
 | `use_trash` | optionnel | Booléen. Si `false`, le fichier sera supprimé, sans passer par la corbeille. Défaut : `true` |
 
 Exemple pour afficher la liste des fichiers du sous-répertoire `facture43` et permettre de rajouter de nouveaux fichiers :

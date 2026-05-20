@@ -31,7 +31,8 @@ table.list th {
     font-weight: bold;
 }
 
-table.list thead th, table.list thead td {
+table.list thead th,
+table.list thead td {
     background-color: rgb(var(--gBgColor));
     background-image: linear-gradient(rgba(var(--gSecondColor), 0.5), rgba(var(--gSecondColor), 0.5));
     color: rgb(var(--gTextColor));
@@ -43,7 +44,8 @@ table.list tfoot tr {
     background: rgba(var(--gSecondColor), 0.2);
 }
 
-table.list th, table.list td {
+table.list th,
+table.list td {
     padding: 0.2em 0.5em;
 }
 
@@ -52,7 +54,8 @@ table.list tr {
     transition: background .2s
 }
 
-table.list tr:nth-child(even), table.multi tbody:nth-child(even) {
+table.list tr:nth-child(even),
+table.multi tbody:nth-child(even) {
     background: rgba(var(--gSecondColor), 0.2);
 }
 
@@ -64,6 +67,25 @@ table.list tbody tr.checked {
     color: rgb(var(--gHoverLinkColor)) !important;
     background: #ffc !important;
 }
+
+table.list tbody tr.clickable:hover,
+table.list tbody tr.clickable:nth-child(even):hover {
+    cursor: pointer;
+    color: #633;
+    background: #ffc;
+}
+
+table.list tbody tr.clickable:hover button,
+table.list tbody tr.focused button {
+    color: rgb(var(--gHoverLinkColor));
+}
+
+table.list tbody tr.focused {
+    color: rgb(100, 100, 50);
+    background: rgb(255, 255, 200);
+    box-shadow: 0 0 5px .2rem #990;
+}
+
 
 table.list tbody tr.highlight {
     box-shadow: 0px 0px 5px 5px rgba(var(--gSecondColor), 1);
@@ -83,7 +105,8 @@ table.list .confirm {
     color: darkgreen;
 }
 
-table.list .num, table.list .check {
+table.list .num,
+table.list .check {
     text-align: center;
 }
 
@@ -95,11 +118,17 @@ table.search th {
     background: rgba(var(--gSecondColor), 0.5);
 }
 
-table.list tr.disabled, table.list td.disabled, table.list th.disabled {
+table.list tr.disabled,
+table.list td.disabled,
+table.list th.disabled,
+table.list tr.disabled th a,
+table.list th.disabled a {
     color: var(--gBorderColor);
 }
 
-table.list tr.crossed th, table.list tr.crossed td, table.list .crossed a {
+table.list tr.crossed th,
+table.list tr.crossed td,
+table.list .crossed a {
     text-decoration: line-through;
 }
 
@@ -115,11 +144,18 @@ table.list tr:nth-child(even).disabled {
     height: fit-content;
 }
 
-.userOrder tr, .userOrder td, .userOrder th {
+.userOrder tr,
+.userOrder td,
+.userOrder th {
     height: 100%;
 }
 
-.userOrder a, .userOrder button {
+table.list thead.userOrder th {
+    font-weight: normal;
+}
+
+.userOrder a,
+.userOrder button {
     text-decoration: none;
     display: inline-flex;
     flex-direction: row;
@@ -141,17 +177,20 @@ table.list tr:nth-child(even).disabled {
     text-align: center;
 }
 
-.userOrder .icon-header a, .userOrder .icon-header button {
+.userOrder .icon-header a,
+.userOrder .icon-header button {
     width: 1.5rem;
     flex-direction: column;
     justify-content: center;
 }
 
-.userOrder a:hover, .userOrder button:hover {
+.userOrder a:hover,
+.userOrder button:hover {
     background: rgba(var(--gBgColor), 0.5);
 }
 
-table.list .userOrder td, table.list .userOrder th {
+table.list .userOrder td,
+table.list .userOrder th {
     padding: .2rem;
     min-height: 2rem;
 }
@@ -185,7 +224,30 @@ table.list .single-action {
 }
 
 table.list .separator {
-    border-left: 2px dashed #999;
+    border-left: 2px solid #999;
+}
+
+table.reconcile .icon {
+    text-align: center;
+}
+
+table.reconcile .icon span {
+    font-size: 2em;
+    line-height: 1rem;
+}
+
+table.reconcile .icon span.ok {
+    color: darkgreen;
+}
+
+table.reconcile .icon span.missing {
+    color: darkred;
+}
+
+table.reconcile thead tr:nth-child(1) th,
+table.reconcile thead tr:nth-child(1) td {
+    text-align: center;
+    background: rgba(var(--gSecondColor), 0.2);
 }
 
 /* Files list */
@@ -299,7 +361,8 @@ table.files.gallery tbody .check {
     position: absolute;
 }
 
-table.files.gallery .icon, table.files.gallery .preview {
+table.files.gallery .icon,
+table.files.gallery .preview {
     width: auto;
     grid-column: span 2;
     font-size: 4em;
@@ -317,7 +380,8 @@ table.files.gallery th {
     text-overflow: ellipsis;
 }
 
-table.files.gallery .size, table.files.gallery .date {
+table.files.gallery .size,
+table.files.gallery .date {
     display: none;
 }
 
@@ -331,11 +395,11 @@ table.files.gallery tbody .actions a {
     margin: .1em;
 }
 
-table.files.gallery tbody .actions > a::before {
+table.files.gallery tbody .actions>a::before {
     padding: 0;
 }
 
-table.files.gallery tbody .actions > a span {
+table.files.gallery tbody .actions>a span {
     text-indent: -70em;
     overflow: hidden;
     display: none;
@@ -389,7 +453,6 @@ table.dragging tbody td {
 
 table.schema caption {
     background: rgba(var(--gSecondColor), 0.2);
-
 }
 
 table.list th a {

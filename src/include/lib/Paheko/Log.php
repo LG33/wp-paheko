@@ -25,6 +25,8 @@ class Log
 
 	const SOFT_LOCKOUT_ATTEMPTS = 3;
 
+	const PASSWORD_LOCKOUT_ATTEMPTS = 2;
+
 	const MESSAGE = 0;
 
 	const LOGIN_FAIL = 1;
@@ -61,7 +63,7 @@ class Log
 		self::MESSAGE => '',
 	];
 
-	static public function add(int $type, ?array $details = null, int $id_user = null): void
+	static public function add(int $type, ?array $details = null, ?int $id_user = null): void
 	{
 		if (isset($details['entity'])) {
 			$details['entity'] = str_replace('Paheko\Entities\\', '', $details['entity']);
@@ -173,6 +175,20 @@ class Log
 		return $count >= self::OTP_LOCKOUT_ATTEMPTS;
 	}
 
+	/**
+	 * Returns TRUE if the current IP address has done too many password recovery requests
+	 */
+	static public function isPasswordRecoveryLocked(): bool
+	{
+		$ip = Utils::getIP();
+
+		// is IP locked out?
+		$sql = sprintf('SELECT COUNT(*) FROM logs WHERE type = ? AND ip_address = ? AND created > datetime(\'now\', \'-%d seconds\');', self::LOCKOUT_DELAY);
+		$count = DB::getInstance()->firstColumn($sql, self::LOGIN_RECOVER, $ip);
+
+		return $count >= self::PASSWORD_LOCKOUT_ATTEMPTS;
+	}
+
 	static public function list(array $params = []): DynamicList
 	{
 		$id_field = DynamicFields::getNameFieldsSQL('u');
@@ -225,7 +241,6 @@ class Log
 
 		$list = new DynamicList($columns, $tables, $conditions);
 		$list->orderBy('created', true);
-		$list->setCount('COUNT(l.id)');
 		$list->setModifier(function (&$row) {
 			$row->details = $row->details ? json_decode($row->details) : null;
 			$row->type_label = $row->type == self::MESSAGE ? ($row->details->message ?? '') : self::ACTIONS[$row->type];
@@ -236,6 +251,9 @@ class Log
 				if (defined($const)
 					&& ($value = constant($const))) {
 					$row->entity_name = $value;
+				}
+				elseif ($row->details->entity === 'Files\\File') {
+					$row->entity_name = 'fichier ' . ($row->details->path ?? '(?)');
 				}
 
 				$const = 'Paheko\Entities\\' . $row->details->entity . '::PRIVATE_URL';

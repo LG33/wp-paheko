@@ -61,7 +61,7 @@ class DynamicFields
 		return array_keys(self::getInstance()->fieldsByType('email'));
 	}
 
-	static public function getFirstEmailField(): string
+	static public function getFirstEmailField(): ?string
 	{
 		return key(self::getInstance()->fieldsByType('email'));
 	}
@@ -594,7 +594,7 @@ class DynamicFields
 	{
 		$fields = array_filter(
 			$this->_fields,
-			fn ($a, $b) => empty($a->list_table) ? false : true,
+			fn ($a, $b) => !empty($a->list_table) || $a->isName() || $a->isNumber(),
 			ARRAY_FILTER_USE_BOTH
 		);
 
@@ -662,7 +662,7 @@ class DynamicFields
 		return array_combine($c, $c);
 	}
 
-	public function getSQLCopy(string $old_table_name, string $new_table_name = User::TABLE, array $fields = null, string $function = null): string
+	public function getSQLCopy(string $old_table_name, string $new_table_name = User::TABLE, ?array $fields = null, ?string $function = null): string
 	{
 		$db = DB::getInstance();
 		unset($fields['id']);
@@ -961,6 +961,9 @@ class DynamicFields
 			if ($field->isModified()) {
 				if ($field->isVirtual() && $field->isModified('sql')) {
 					$rebuild_view = true;
+				}
+				elseif ($field->isModified('type')) {
+					$rebuild = true;
 				}
 
 				$field->save();

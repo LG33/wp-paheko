@@ -13,6 +13,7 @@ $form->runIf('create', function () {
 	$module = new Module;
 	$module->importForm();
 	$module->set('web', false);
+	$module->selfCheckUser();
 	$module->save();
 	$module->exportToIni();
 
@@ -21,7 +22,7 @@ $form->runIf('create', function () {
 
 
 $types = [0 => 'Module normal', 1 => 'Site web'];
-$sections = [null => '— Pas de restriction —'];
+$sections = ['' => '— Pas de restriction —'];
 
 foreach (Category::PERMISSIONS as $section => $details) {
 	$sections[$details['label']] = [];

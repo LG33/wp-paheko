@@ -48,6 +48,20 @@ class Accounts
 		return EntityManager::findOne(Account::class, 'SELECT * FROM @TABLE WHERE code = ? AND id_chart = ?', $code, $this->chart_id);
 	}
 
+	/**
+	 * Return the account ID that is valid for the current chart.
+	 */
+	public function getValidAccountId(int $id): ?int
+	{
+		$db = DB::getInstance();
+
+		if ($db->test(Account::TABLE, 'id = ? AND id_chart = ?', $id, $this->chart_id)) {
+			return $id;
+		}
+
+		return $db->firstColumn('SELECT id FROM acc_accounts WHERE code = (SELECT code FROM acc_accounts WHERE id = ?) AND id_chart = ?;', $id, $this->chart_id) ?: null;
+	}
+
 	static public function getSelector(?int $id): ?array
 	{
 		if (!$id) {
@@ -162,7 +176,7 @@ class Accounts
 		return $db->getGrouped($sql);
 	}
 
-	protected function getListFilterClause(array $criterias, string $prefix = ''): string
+	protected function getListFilterClause(?array $criterias, string $prefix = ''): string
 	{
 		$db = $this->em->DB();
 		$where = '';
@@ -172,7 +186,7 @@ class Accounts
 		}
 
 		if (!empty($criterias['codes']) && !empty($criterias['types'])) {
-			$where .= ' AND ';
+			$where .= ' OR ';
 		}
 
 		// Build LIKE condition for codes
@@ -198,18 +212,15 @@ class Accounts
 	 */
 	public function listCommonGrouped(array $criterias): array
 	{
+		// If we want all types, then we will get used or bookmarked accounts in common types
+		// and only bookmarked accounts for other types, grouped in "Others"
 		$types = $criterias['types'] ?? null;
 		$codes = $criterias['codes'] ?? null;
 
-		if (empty($criterias['types'])) {
-			// If we want all types, then we will get used or bookmarked accounts in common types
-			// and only bookmarked accounts for other types, grouped in "Others"
-			$criterias['types'] = Account::COMMON_TYPES;
-		}
-
 		$out = [];
+		$types = $criterias['types'] ?? Account::COMMON_TYPES;
 
-		foreach ($criterias['types'] as $type) {
+		foreach ($types as $type) {
 			$out[$type] = (object) [
 				'label'    => Account::TYPES_NAMES[$type],
 				'type'     => $type,
@@ -217,20 +228,18 @@ class Accounts
 			];
 		}
 
-		if (null === $types) {
-			$out[0] = (object) [
-				'label'    => 'Autres',
-				'type'     => 0,
-				'accounts' => [],
-			];
-		}
+		$out[0] = (object) [
+			'label'    => 'Autres',
+			'type'     => 0,
+			'accounts' => [],
+		];
 
 		$db = $this->em->DB();
 		$where = $this->getListFilterClause($criterias, 'a.');
 
 		$sql = sprintf('SELECT a.* FROM @TABLE a
 			LEFT JOIN acc_transactions_lines b ON b.id_account = a.id
-			WHERE a.id_chart = %d AND %s AND (a.bookmark = 1 OR b.id IS NOT NULL)
+			WHERE a.id_chart = %d AND (%s) AND (a.bookmark = 1 OR b.id IS NOT NULL)
 			GROUP BY a.id
 			ORDER BY type, code COLLATE NOCASE;',
 			$this->chart_id,
@@ -240,16 +249,21 @@ class Accounts
 		$query = $this->em->iterate($sql);
 
 		foreach ($query as $row) {
-			$t = in_array($row->type, $criterias['types']) ? $row->type : 0;
+			$t = in_array($row->type, $types) ? $row->type : 0;
 			$out[$t]->accounts[] = $row;
 		}
 
+		// Remove empty types from return
 		if (!empty($criterias['codes'])) {
 			foreach ($out as $key => $v) {
 				if (!count($v->accounts)) {
 					unset($out[$key]);
 				}
 			}
+		}
+
+		if (count($types) && empty($out[0]->accounts)) {
+			unset($out[0]);
 		}
 
 		return $out;
@@ -332,7 +346,8 @@ class Accounts
 
 		$columns['status'] = [
 			'select' => null,
-			'label' => 'Statut',
+			'label'  => 'Statut',
+			'export' => false,
 		];
 
 		$tables = 'users u
@@ -350,10 +365,14 @@ class Accounts
 		$list = new DynamicList($columns, $tables, $conditions);
 		$list->orderBy('balance', false);
 		$list->groupBy('u.id');
-		$list->setCount('COUNT(*)');
 		$list->setPageSize(null);
-		$list->setExportCallback(function (&$row) {
+		$list->setExportCallback(function (&$row) use ($only_third_party) {
 			$row->balance = Utils::money_format($row->balance, '.', '', false);
+
+			if (!$only_third_party) {
+				$row->products = Utils::money_format($row->products, '.', '', false);
+				$row->expenses = Utils::money_format($row->expenses, '.', '', false);
+			}
 		});
 
 		return $list;
@@ -365,19 +384,38 @@ class Accounts
 	 */
 	static public function isReversed(bool $simple, int $type): bool
 	{
-		if ($simple && in_array($type, [Account::TYPE_BANK, Account::TYPE_CASH, Account::TYPE_OUTSTANDING, Account::TYPE_EXPENSE, Account::TYPE_THIRD_PARTY])) {
+		if ($simple
+			&& in_array($type, [Account::TYPE_BANK, Account::TYPE_CASH, Account::TYPE_OUTSTANDING, Account::TYPE_EXPENSE, Account::TYPE_THIRD_PARTY])) {
 			return false;
 		}
 
 		return true;
 	}
 
-	static public function getReconciledBalance(int $account_id, int $year_id): int
+	/**
+	 * Return TRUE if account has all lines reconciled,
+	 * NULL if account has never been reconciled,
+	 * or FALSE of there is at least one reconciled line and at least one non-reconciled line
+	 */
+	static public function isReconciled(int $account_id, int $year_id): ?bool
 	{
-		return (int) DB::getInstance()->firstColumn('SELECT SUM(l.credit) - SUM(l.debit)
+		$r = DB::getInstance()->first('SELECT SUM(l.reconciled) AS "count",
+			SUM(CASE WHEN l.reconciled = 0 THEN 1 ELSE 0 END) AS "missing"
 			FROM acc_transactions_lines l
 			INNER JOIN acc_transactions t ON t.id = l.id_transaction
-			WHERE t.id_year = ? AND l.id_account = ? AND l.reconciled = 1;', $year_id, $account_id);
+			WHERE t.id_year = ? AND l.id_account = ?;',
+			$year_id, $account_id);
+
+		if ($r->count === 0) {
+			return null;
+		}
+
+		if ($r->missing) {
+			return false;
+		}
+		else {
+			return true;
+		}
 	}
 
 /* FIXME: implement closing of accounts

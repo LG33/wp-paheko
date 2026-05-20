@@ -24,7 +24,7 @@ use Paheko\Entities\Accounting\Account;
 			<tr>
 				<td></td>
 				<td class="num">Numéro</td>
-				<th>Compte</th>
+				<th scope="col">Compte</th>
 				<td class="money">Solde</td>
 				<td></td>
 				<td></td>
@@ -40,7 +40,7 @@ use Paheko\Entities\Accounting\Account;
 				<tr class="account">
 					<td class="bookmark">{if $account.bookmark}{icon shape="star" title="Compte favori"}{/if}</td>
 					<td class="num"><a href="{$admin_url}acc/accounts/journal.php?id={$account.id}&amp;year={$current_year.id}">{$account.code}</a></td>
-					<th><a href="{$admin_url}acc/accounts/journal.php?id={$account.id}&amp;year={$current_year.id}">{$account.label}</a></th>
+					<th scope="row"><a href="{$admin_url}acc/accounts/journal.php?id={$account.id}&amp;year={$current_year.id}">{$account.label}</a></th>
 					<td class="money">
 						{show_balance account=$account}
 					</td>
@@ -54,21 +54,24 @@ use Paheko\Entities\Accounting\Account;
 						{elseif $account.type == Account::TYPE_CASH && $account.balance > 0 && $account.position == Account::LIABILITY}
 							{tag preset="anomaly"}
 						{/if}
-						{if $account.type === Account::TYPE_BANK && $account.reconciled_balance}
-							{if $account.reconciled_balance != $account.balance}
-								{tag small=true preset="reconciliation_required"}
-							{else}
+						{if $account.type === Account::TYPE_BANK}
+							{if $account.is_reconciled === true}
 								{tag small=true preset="reconciled"}
+							{elseif $account.is_reconciled === false}
+								{tag small=true preset="reconciliation_required"}
 							{/if}
 						{/if}
 					</td>
 					<td class="actions">
-						{if $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_ADMIN)}
-							{if $account.type === Entities\Accounting\Account::TYPE_BANK && ($account.debit || $account.credit)}
-								{linkbutton label="Rapprochement" shape="check" href="reconcile.php?id=%d"|args:$account.id}
-							{elseif $account.type === Entities\Accounting\Account::TYPE_OUTSTANDING && $account.debit}
-								{linkbutton label="Dépôt en banque" shape="check" href="deposit.php?id=%d&from_year=%d"|args:$account.id:$current_year.id}
-							{/if}
+						{if $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_ADMIN)
+							&& $account.type === Entities\Accounting\Account::TYPE_BANK
+							&& ($account.debit || $account.credit)}
+							{linkbutton label="Import" shape="import" href="import.php?id=%d"|args:$account.id}
+							{linkbutton label="Rapprochement" shape="check" href="reconcile.php?id=%d"|args:$account.id}
+						{elseif $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_WRITE)
+							&& $account.type === Entities\Accounting\Account::TYPE_OUTSTANDING
+							&& $account.debit}
+							{linkbutton label="Dépôt en banque" shape="check" href="deposit.php?id=%d&"|args:$account.id}
 						{/if}
 						{linkbutton label="Journal" shape="menu" href="journal.php?id=%d&year=%d"|args:$account.id,$current_year.id}
 					</td>

@@ -25,6 +25,10 @@ $codes = array_filter($codes);
 $id_chart = intval($_GET['id_chart'] ?? 0);
 $id_year = intval($_GET['id_year'] ?? 0);
 
+if (isset($_GET['year'])) {
+	$id_year = (int) $_GET['year'];
+}
+
 if ($id_chart && $id_year) {
 	throw new UserException('Invalid call: id_chart and id_year cannot be specified at the same time', 400);
 }
@@ -46,10 +50,11 @@ $filter_all_url = Utils::getModifiedURL('?filter=all');
 $filter_bookmarks_url = Utils::getModifiedURL('?filter=bookmarks');
 
 // Cache the page until the charts have changed
-$last_change = Config::getInstance()->get('last_chart_change') ?: time();
+$last_change = Config::getInstance()->get('last_chart_change');
 $params = $_GET;
 $params['filter'] = $filter;
-$hash = sha1(http_build_query($params));
+
+$hash = sha1(http_build_query($params) . $last_change);
 
 // This method will exit here if the list has already been cached by the client
 Utils::HTTPCache($hash, null, 1);

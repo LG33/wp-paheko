@@ -12,10 +12,10 @@ if (!DESKTOP_CONFIG_FILE) {
 
 function has_command(string $command) {
 	if (PHP_OS_FAMILY === 'Windows') {
-		$result = strtok(shell_exec('where ' . $command) ?? '', "\n");
+		$result = strtok(Utils::quick_exec('where ' . $command) ?? '', "\n");
 	}
 	else {
-		$result = shell_exec('which ' . $command);
+		$result = Utils::quick_exec('which ' . $command);
 	}
 
 	return trim((string)$result) !== '';
@@ -46,6 +46,7 @@ $form->runIf('save', function() {
 		$constants['SMTP_HOST'] = strval($_POST['SMTP_HOST'] ?? '') ?: null;
 		$constants['SMTP_PORT'] = intval($_POST['SMTP_PORT'] ?? '') ?: null;
 		$constants['SMTP_USER'] = strval($_POST['SMTP_USER'] ?? '') ?: null;
+		$constants['SMTP_SECURITY'] = strval($_POST['SMTP_SECURITY'] ?? 'NONE');
 
 		if (!empty($constants['SMTP_PASSWORD'])) {
 			$constants['SMTP_PASSWORD'] = strval($_POST['SMTP_PASSWORD']);
@@ -113,13 +114,21 @@ else {
 	$current_email_option = 'php';
 }
 
+$smtp_security_options = [
+	'NONE'     => 'Aucune',
+	'SSL'      => 'SSL',
+	'TLS'      => 'TLS',
+	'STARTTLS' => 'STARTTLS',
+];
+
 $tpl->assign(compact('csrf_key',
 	'win',
 	'constants',
 	'conversion_commands',
 	'available_conversion_commands',
 	'email_options',
-	'current_email_option'
+	'current_email_option',
+	'smtp_security_options'
 ));
 
 $tpl->display('config/desktop.tpl');

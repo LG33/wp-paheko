@@ -10,17 +10,22 @@ use Paheko\DB;
 use Paheko\Utils;
 use Paheko\ValidationException;
 use Paheko\UserException;
+use Paheko\TemplateException;
 use Paheko\Users\Session;
 use Paheko\Web\Web;
 use Paheko\Entities\Files\File;
 use Paheko\Entities\Users\User;
 use Paheko\Entities\Web\Page;
 
-use const Paheko\ROOT;
-use const Paheko\ADMIN_URL;
+use const Paheko\{
+	ROOT,
+	ADMIN_URL,
+	SHOW_ERRORS
+};
 
 use KD2\DB\EntityManager as EM;
 use KD2\ZipReader;
+use KD2\ErrorManager;
 
 class Modules
 {
@@ -44,6 +49,15 @@ class Modules
 		}
 
 		return @file_get_contents(Module::DIST_ROOT . '/' . $path) ?: null;
+	}
+
+	static public function distExists(string $name): bool
+	{
+		if (!preg_match(Module::VALID_NAME_REGEXP, $name)) {
+			return false;
+		}
+
+		return is_dir(Module::DIST_ROOT . '/' . $name);
 	}
 
 	/**
@@ -73,7 +87,7 @@ class Modules
 		}
 
 		foreach ($delete as $name) {
-			self::get($name)->delete();
+			self::get($name, true)->delete();
 		}
 
 		foreach ($existing as $name) {
@@ -149,38 +163,11 @@ class Modules
 		return $list;
 	}
 
-	/**
-	 * List locally installed modules, directly from the filesystem, without creating them in the database cache
-	 * (used in Install form)
-	 */
-	static public function listLocal(): array
-	{
-		$list = self::listRaw(false);
-		$out = [];
-
-		foreach ($list as $name) {
-			$m = new Module;
-			$m->name = $name;
-
-			if (!$m->updateFromINI(false)) {
-				continue;
-			}
-
-			$out[$name] = $m;
-		}
-
-		return $out;
-	}
-
 	static public function create(string $name): ?Module
 	{
 		$module = new Module;
 		$module->name = $name;
-
-		if (!$module->updateFromINI()) {
-			return null;
-		}
-
+		$module->updateFromINI();
 		$module->save();
 		$module->updateTemplates();
 		return $module;
@@ -191,7 +178,16 @@ class Modules
 	 */
 	static public function list(): array
 	{
-		return EM::getInstance(Module::class)->all('SELECT * FROM @TABLE ORDER BY label COLLATE NOCASE ASC;');
+		$out = [];
+		$i = EM::getInstance(Module::class)->iterate('SELECT * FROM @TABLE ORDER BY label COLLATE NOCASE ASC;');
+
+		foreach ($i as $module) {
+			if ($module->isValid()) {
+				$out[] = $module;
+			}
+		}
+
+		return $out;
 	}
 
 	static public function snippetsAsString(string $snippet, array $variables = []): string
@@ -217,7 +213,32 @@ class Modules
 				continue;
 			}
 
-			$out[$module->name] = $module->fetch($snippet, $variables);
+			try {
+				$content = $module->fetch($snippet, $variables);
+			}
+			catch (TemplateException $e) {
+				$has_local_file = $module->hasLocalFile($snippet);
+
+				// Make sure we report errors if they come from shipped code
+				if (!$has_local_file) {
+					ErrorManager::reportExceptionSilent($e);
+				}
+
+				if (!SHOW_ERRORS && !$has_local_file) {
+					$message = sprintf('Une erreur est survenue dans le module "%s". Elle a été signalée aux développeur⋅euses.', $module->name);
+				}
+				// Display specific error for user modules
+				else {
+					$message = sprintf('Erreur dans "%s" :', $snippet);
+					$message .= " " . $e->getMessage();
+				}
+
+				$message .= "\n" . 'Cette erreur n\'empêche pas cette page de fonctionner (normalement).';
+
+				$content = sprintf('<p class="block alert">%s</p>', nl2br(htmlspecialchars($message)));
+			}
+
+			$out[$module->name] = $content;
 		}
 
 		return array_filter($out, fn($a) => trim($a) !== '');
@@ -225,19 +246,37 @@ class Modules
 
 	static public function listForSnippet(string $snippet): array
 	{
-		return EM::getInstance(Module::class)->all('SELECT f.* FROM @TABLE f
+		$out = [];
+
+		$i = EM::getInstance(Module::class)->iterate('SELECT f.* FROM @TABLE f
 			INNER JOIN modules_templates t ON t.id_module = f.id
 			WHERE t.name = ? AND f.enabled = 1
 			ORDER BY f.label COLLATE NOCASE ASC;', $snippet);
+
+		foreach ($i as $module) {
+			if ($module->isValid()) {
+				$out[] = $module;
+			}
+		}
+
+		return $out;
 	}
 
-	static public function get(string $name): ?Module
+	static public function get(string $name, bool $return_invalid = false): ?Module
 	{
+		if (!$return_invalid && !preg_match(Module::VALID_NAME_REGEXP, $name)) {
+			return null;
+		}
+
 		return EM::findOne(Module::class, 'SELECT * FROM @TABLE WHERE name = ?;', $name);
 	}
 
 	static public function isEnabled(string $name): bool
 	{
+		if (!preg_match(Module::VALID_NAME_REGEXP, $name)) {
+			return false;
+		}
+
 		return (bool) EM::getInstance(Module::class)->col('SELECT 1 FROM @TABLE WHERE name = ? AND enabled = 1;', $name);
 	}
 
@@ -262,6 +301,8 @@ class Modules
 			$module->set('enabled', true);
 			$module->save();
 		}
+
+		$module->assertIsValid();
 
 		return $module;
 	}
@@ -289,9 +330,22 @@ class Modules
 			$module = self::getWeb();
 		}
 
+		// Make sure the module name is valid
+		$module->assertIsValid();
+
 		// If path ends with trailing slash, then ask for index.html
 		if (!$path || substr($path, -1) == '/') {
 			$path .= 'index.html';
+		}
+		// Redirect /m/module/directory to /m/module/directory/
+		elseif ($module->hasLocalDir($path)) {
+			// Unless this directory doesn't have an index
+			if (!$module->hasLocalFile($path . '/' . $module::INDEX_FILE)) {
+				throw new UserException('This path does not exist, sorry.', 404);
+			}
+
+			Utils::redirect('/' . $uri . '/');
+			return;
 		}
 
 		$name = Utils::basename($uri);
@@ -334,11 +388,15 @@ class Modules
 					$page = $page->asTemplateArray();
 				}
 			}
+			elseif ($page = Web::getByOldURI($uri)) {
+				http_response_code(301);
+				header('Location: ' . $page->url());
+				return;
+			}
 		}
 		// 404 if module is not enabled, except for icon
 		elseif (!$module->enabled && !$module->system && $path != Module::ICON_FILE) {
-			http_response_code(404);
-			throw new UserException('This page is currently disabled.');
+			throw new UserException('This page is currently disabled.', 404);
 		}
 
 		// Restrict access
@@ -355,9 +413,7 @@ class Modules
 
 		// Check if the file actually exists in the module
 		if (!$has_local_file && !$has_dist_file) {
-
-			http_response_code(404);
-			throw new UserException('This path does not exist, sorry.');
+			throw new UserException('This path does not exist, sorry.', 404);
 		}
 
 		$module->serve($path, $has_local_file, compact('uri', 'page'));
@@ -445,9 +501,8 @@ class Modules
 				Files::createFromString($base  . '/' . $local_name, $content);
 			}
 
-			if (!$module->updateFromINI()) {
-				throw new ValidationException('Le fichier module.ini est invalide.');
-			}
+			$module->updateFromINI();
+			$module->selfCheckUser();
 
 			$module->save();
 			$module->updateTemplates();

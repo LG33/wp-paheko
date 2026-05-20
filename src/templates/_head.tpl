@@ -59,13 +59,17 @@ if (ALERT_MESSAGE && !$dialog) {
 }
 ?>
 
-<body{if !empty($class)} class="{$class}"{/if}{if !empty($upload_here)}{enable_upload_here path=$upload_here}{/if}>
+<body{if !empty($class)} class="{$class}"{/if}{if !empty($upload_here)}{enable_upload_here path=$upload_here}{elseif !empty($upload_here_url)}{enable_upload_here url=$upload_here_url}{/if}>
 
 {if ALERT_MESSAGE && !$dialog}
 	<div id="sticky-alert"><?=ALERT_MESSAGE?></div>
 {/if}
 
 {if !array_key_exists('_dialog', $_GET) && $layout !== 'public' && $layout !== 'raw'}
+<nav id="skip">
+	<a href="#content">Aller au contenu</a>
+</nav>
+
 <nav id="menu">
 	<figure class="logo">
 	{if isset($config) && ($url = $config->fileURL('logo', '150px'))}
@@ -182,11 +186,11 @@ if (ALERT_MESSAGE && !$dialog) {
 </header>
 {elseif $layout === 'public'}
 <header class="public">
-	<h1><a href="{$site_url}">{if $config.files.logo}<img src="{$config->fileURL('logo', '150px')}" alt="" />{else}{$config.org_name}{/if}</a></h1>
+	<h1><a href="{$site_url}">{if $config.files.logo}<img src="{$config->fileURL('logo', '150px')}" alt="{$config.org_name}" />{else}{$config.org_name}{/if}</a></h1>
 </header>
 {/if}
 
-<main>
+<main id="content">
 	{if empty($hide_title) && !$dialog}
 	<h1 class="main">{$title}</h1>
 	{/if}

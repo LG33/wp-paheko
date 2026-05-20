@@ -56,7 +56,7 @@ $title = $field->exists() ? 'Modifier un champ' : 'Ajouter un champ';
 	{/if}
 	{if !$field->isNumber()}
 	{* User number is always mandatory *}
-	<dl class="type-not-virtual type-not-password type-not-file">
+	<dl class="type-not-virtual type-not-password type-not-file type-not-multiple">
 		{input type="checkbox" name="required" value=1 label="Champ obligatoire" help="Si coché, une fiche de membre ne pourra pas être enregistrée si ce champ n'est pas renseigné." source=$field}
 		{input type="text" name="default_value" source=$field label="Valeur par défaut" help="Si renseigné, le champ aura cette valeur par défaut lors de l'ajout d'un nouveau membre"}
 	</dl>
@@ -89,30 +89,36 @@ $title = $field->exists() ? 'Modifier un champ' : 'Ajouter un champ';
 	</dl>
 </fieldset>
 
+{if !$field->isPassword()}
 <fieldset>
-	<legend>Accès</legend>
-	<dl>
-		<dt><label for="f_user_access_level_0">Le membre lui-même peut…</label></dt>
-	</dl>
+	<legend>Accès membre</legend>
+	<p class="help">Indiquer ici si le membre pourra voir et modifier cette information dans son menu <em>"Mes infos personnelles"</em>.</p>
+	{if !$field->isNumber()}
 	<dl class="type-not-virtual">
-{if !$field->isNumber()}
-		<dd class="help">Indiquer ici si le membre pourra voir ou modifier cette information dans sa section <em>"Mes infos personnelles"</em>.</dd>
-		{input type="radio" name="user_access_level" value=$session::ACCESS_WRITE label="Voir et modifier ce champ" source=$field}
-{/if}
+		{input type="radio" name="user_access_level" value=$session::ACCESS_WRITE label="Le membre peut voir et modifier ce champ" source=$field}
 	</dl>
+	{/if}
 	<dl>
-		{input type="radio" name="user_access_level" value=$session::ACCESS_READ label="Seulement voir ce champ" source=$field default=$session::ACCESS_READ}
-		{input type="radio" name="user_access_level" value=$session::ACCESS_NONE label="Rien, cette information ne doit pas être visible par le membre" source=$field}
+		{input type="radio" name="user_access_level" value=$session::ACCESS_READ label="Le membre peut seulement voir ce champ" source=$field default=$session::ACCESS_READ}
+		{input type="radio" name="user_access_level" value=$session::ACCESS_NONE label="Ce champ est caché au membre" help="Le membre ne peut ni voir, ni modifier ce champ" source=$field}
 		<dd class="help">Attention&nbsp;: conformément à la réglementation (RGPD), quel que soit votre choix, le membre pourra voir le contenu de ce champ en effectuant un export de ses données personnelles (s'il a le droit de se connecter).</dd>
-{if !$field->isNumber() && !$field->isName()}
-{* You can always see user name and number, is is not relevant *}
-		<dt><label for="f_management_access_level_1">Un autre membre peut voir ce champ…</label></dt>
-		{input type="radio" name="management_access_level" value=$session::ACCESS_READ label="S'il a accès à la gestion des membres (en lecture, écriture, ou administration)" source=$field default=$session::ACCESS_READ}
-		{input type="radio" name="management_access_level" value=$session::ACCESS_WRITE label="Seulement s'il a accès en écriture à la gestion des membres" source=$field}
-		{input type="radio" name="management_access_level" value=$session::ACCESS_ADMIN label="Seulement s'il a accès en administration à la gestion des membres" source=$field}
-{/if}
 	</dl>
 </fieldset>
+{/if}
+
+{if !$field->isNumber() && !$field->isName() && !$field->isPassword()}
+{* You can always see user name and number, is is not relevant.
+	And only superadmins can set passwords. *}
+<fieldset>
+	<legend>Accès gestionnaire</legend>
+	<dl>
+		{input type="radio" name="management_access_level" value=$session::ACCESS_READ label="Tous" source=$field default=$session::ACCESS_READ}
+		<dd class="help">Tout membre ayant accès à la gestion des membres (en lecture, écriture, ou administration) pourra voir le contenu de ce champ.</dd>
+		{input type="radio" name="management_access_level" value=$session::ACCESS_WRITE label="Écriture et administration seulement" source=$field}
+		{input type="radio" name="management_access_level" value=$session::ACCESS_ADMIN label="Administration uniquement" source=$field}
+	</dl>
+</fieldset>
+{/if}
 
 <p class="submit">
 	{csrf_field key=$csrf_key}

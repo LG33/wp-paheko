@@ -10,8 +10,10 @@ use Paheko\Web\Web;
 
 use Paheko\API;
 use Paheko\Config;
+use Paheko\DB;
 use Paheko\Plugins;
 use Paheko\Entities\Plugin;
+use Paheko\Template;
 use Paheko\UserException;
 use Paheko\Utils;
 use Paheko\Users\Users;
@@ -21,7 +23,18 @@ use Paheko\Users\Session;
 
 use \KD2\HTML\Markdown;
 
-use const Paheko\{WWW_URI, ADMIN_URL, BASE_URL, WWW_URL, HELP_URL, ROOT, HTTP_LOG_FILE, WEBDAV_LOG_FILE, WOPI_LOG_FILE};
+use const Paheko\{
+	WWW_URI,
+	ADMIN_URL,
+	BASE_URL,
+	WWW_URL,
+	HELP_URL,
+	ROOT,
+	HTTP_LOG_FILE,
+	WEBDAV_LOG_FILE,
+	WOPI_LOG_FILE,
+	LOCAL_SECRET_KEY
+};
 
 class Router
 {
@@ -35,16 +48,29 @@ class Router
 		'avatars',
 	];
 
-	static public function route(string $uri = null): void
+	static public function getRequestURI(?string $uri = null): ?string
 	{
 		$uri ??= !empty($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/';
+		// parse_url($uri, PHP_URL_PATH) fails here when URI = "//index.html", we can't use it
+		$uri = preg_replace('!^https?://[^/]+|\?.*$!', '', $uri);
 
-		$uri = parse_url($uri, \PHP_URL_PATH);
-
-		// WWW_URI inclus toujours le slash final, mais on veut le conserver ici
+		// WWW_URI always includes the final slash, but we want to keep it here
 		$uri = substr($uri, strlen(WWW_URI) - 1);
 
-		// This might be changed later
+		return $uri;
+	}
+
+	static public function route(?string $uri = null): void
+	{
+		$uri = self::getRequestURI($uri);
+
+		// Redirect if there is a double slash
+		if (false !== strpos($uri, '//')) {
+			Utils::redirect(preg_replace('!//+!', '/', $uri));
+		}
+
+		// This might be changed by some other code later
+		// It's just here in case another code was set before
 		http_response_code(200);
 
 		$uri = ltrim($uri, '/');
@@ -62,15 +88,15 @@ class Router
 				$_SERVER['REMOTE_ADDR'],
 				implode("\n  ", array_map(fn ($v, $k) => $k . ': ' . $v, $headers, array_keys($headers)))
 			);
-
-			if ($method != 'GET' && $method != 'OPTIONS' && $method != 'HEAD') {
-				//self::log('ROUTER', "<= Request body:\n%s", file_get_contents('php://input'));
-			}
 		}
 
 		// Redirect old URLs (pre-1.1)
 		if ($uri === 'feed/atom/') {
 			Utils::redirect('/atom.xml');
+		}
+		// Redirect to PIM plugin
+		elseif ($uri === '.well-known/caldav' || $uri === '.well-known/carddav') {
+			Utils::redirect('/p/pim/');
 		}
 		elseif ($uri === 'favicon.ico') {
 			http_response_code(301);
@@ -85,6 +111,15 @@ class Router
 			echo "User-agent: GPTBot\nDisallow: /\n";
 			return;
 		}
+		// Add trailing slash to URLs if required
+		elseif (($first === 'p' || $first === 'm') && preg_match('!^(?:admin/p|p|m)/\w+$!', $uri)) {
+			Utils::redirect('/' . $uri . '/');
+		}
+
+		if (self::blockSuspiciousClient()) {
+			return;
+		}
+
 		// Private file sharing
 		elseif ($first === 's') {
 			$_GET['uri'] = substr($uri, 2);
@@ -95,10 +130,6 @@ class Router
 		elseif ($first === 'user' && strpos($uri, 'user/avatar/') !== false) {
 			Users::serveAvatar(substr($uri, strlen('user/avatar/')));
 			return;
-		}
-		// Add trailing slash to URLs if required
-		elseif (($first === 'p' || $first === 'm') && preg_match('!^(?:admin/p|p|m)/\w+$!', $uri)) {
-			Utils::redirect('/' . $uri . '/');
 		}
 		elseif ((($first === 'admin' && 0 === strpos($uri, 'admin/p/')) || $first === 'p')
 			&& preg_match('!^(?:admin/p|p)/(' . Plugins::NAME_REGEXP . ')/(.*)$!', $uri, $match)
@@ -150,6 +181,14 @@ class Router
 		}
 		// Don't try to route paths with no slash, files are always in a sub-directory
 		elseif ($uri && false !== strpos($uri, '/') && self::routeFile($uri)) {
+			return;
+		}
+		elseif (is_numeric($uri[0] ?? '')
+			&& is_numeric($uri[1] ?? '')
+			&& preg_match('/^(\d+)-(.*)$/', $uri, $match)
+			&& $match[1] == strlen($match[2])) {
+			self::markClientSuspicious();
+			Web::serveHoneypotPage($uri);
 			return;
 		}
 
@@ -236,6 +275,53 @@ class Router
 		Plugins::fire('http.request.file.after', false, compact('file', 'uri', 'session'));
 
 		return true;
+	}
+
+	static public function markClientSuspicious(): void
+	{
+		$db = DB::getInstance();
+		$expiry = new \DateTime('+7 days');
+		$db->preparedQuery('REPLACE INTO web_suspicious_clients (ip, expiry) VALUES (?, ?);', Utils::getIP(), $expiry);
+	}
+
+	static public function blockSuspiciousClient(): bool
+	{
+		$db = DB::getInstance();
+		$ip = Utils::getIP();
+
+		if (!$db->test('web_suspicious_clients', 'ip = ? AND expiry >= ?', Utils::getIP(), new \DateTime)) {
+			return false;
+		}
+
+		$cookie = $_COOKIE['_susc'] ?? '';
+		@list($expiry, $hash) = explode(':', $cookie, 2);
+
+		if ($expiry >= time()
+			&& hash_hmac('sha1', $ip . $expiry, LOCAL_SECRET_KEY) === $hash) {
+			return false;
+		}
+
+		if (($_SERVER['HTTP_SEC_FETCH_DEST'] ?? null) === 'empty') {
+			$expiry = time() + 3600 * 24;
+			$hash = hash_hmac('sha1', $ip . $expiry, LOCAL_SECRET_KEY);
+			setcookie('_susc', $expiry . ':' . $hash, $expiry, '/');
+			return true;
+		}
+
+		http_response_code(403);
+		$tpl = Template::getInstance();
+		$tpl->display('suspicious.tpl');
+
+		return true;
+	}
+
+	static public function getHoneypotURL(string $seed = WWW_URL): string
+	{
+		// Always the same word
+		mt_srand(substr(base_convert(md5($seed), 16, 10), -8));
+		$chars = 'aaaeeeiiiuuuooobbccddfghkllmmnnppqrssttvwxz';
+		$word = substr(str_shuffle($chars), 0, mt_rand(10, strlen($chars)));
+		return WWW_URL . strlen($word) . '-' . $word;
 	}
 
 	static public function log(string $type, string $message, ...$params)

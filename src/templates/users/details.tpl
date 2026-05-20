@@ -19,7 +19,7 @@
 	</dd>
 	{foreachelse}
 	<dd>
-		Ce membre n'est inscrit à aucune activité ou cotisation.
+		Ce membre n'est actuellement inscrit à aucune activité ou cotisation.
 	</dd>
 	{/foreach}
 	{if $session->canAccess($session::SECTION_USERS, $session::ACCESS_WRITE)}
@@ -29,7 +29,7 @@
 			</dd>
 		{else}
 			<dd class="help">
-				Ce membre est dans une catégorie caché, il n'est plus possible de l'inscrire à une activité.
+				Ce membre est dans une catégorie cachée, il n'est plus possible de l'inscrire à une activité.
 			</dd>
 		{/if}
 	{/if}
@@ -74,8 +74,10 @@
 		{if $user->isHidden()}
 			<dd>{tag color="darkred" label="Catégorie cachée"}</dd>
 		{/if}
-		<dt>Droits</dt>
-		<dd><span class="permissions">{display_permissions permissions=$category}</span></dd>
+		{if ENABLE_PERMISSIONS}
+			<dt>Droits</dt>
+			<dd><span class="permissions">{display_permissions permissions=$category}</span></dd>
+		{/if}
 		<dt>Dernière connexion</dt>
 		<dd>{if empty($user.date_login)}Jamais{else}{$user.date_login|date_short:true}{/if}</dd>
 		{if $session->canAccess($session::SECTION_USERS, $session::ACCESS_ADMIN)}
@@ -83,7 +85,7 @@
 			{linkbutton shape="menu" label="Journal d'audit" href="!users/log.php?id=%d"|args:$user.id}
 		</dd>
 		{/if}
-		<dt>Sécurité</dt>
+		<dt>Connexion</dt>
 		<dd>
 			{if empty($user.password)}
 				{tag color="darkgrey" label="Pas de mot de passe"}
@@ -97,24 +99,24 @@
 				{/if}
 			{/if}
 		</dd>
-		{if $can_change_password}
+		{if $can_change_password || $logged_user.id == $user.id}
 			<dd>
 			{if $logged_user.id == $user.id}
 				{linkbutton shape="settings" label="Modifier mon mot de passe" href="!me/security.php"}
 			{elseif $user.password}
-				{linkbutton shape="settings" label="Modifier le mot de passe" href="edit_security.php?id=%d"|args:$user.id target="_dialog"}
+				{linkbutton shape="settings" label="Options de connexion" href="edit_security.php?id=%d"|args:$user.id target="_dialog"}
 			{else}
-				{linkbutton shape="settings" label="Définir un mot de passe" href="edit_security.php?id=%d"|args:$user.id target="_dialog"}
+				{linkbutton shape="help" label="Choisir un mot de passe" href="edit_security.php?id=%d"|args:$user.id target="_dialog"}
 			{/if}
 			</dd>
 		{/if}
 		{if $can_login}
-		<dd>
-			<form method="post" action="" onsubmit="return confirm(&quot;Cela va vous déconnecter et vous reconnecter comme si vous étiez ce membre. Continuer ?&quot);">
-				{csrf_field key=$csrf_key}
-				{button name="login_as" type="submit" shape="login" label="Se connecter à sa place"}
-			</form>
-		</dd>
+			<dd>
+				<form method="post" action="" onsubmit="return confirm(&quot;Cela va vous déconnecter et vous reconnecter comme si vous étiez ce membre. Continuer ?&quot);">
+					{csrf_field key=$csrf_key}
+					{button name="login_as" type="submit" shape="login" label="Se connecter à sa place"}
+				</form>
+			</dd>
 		{/if}
 	</dl>
 </aside>

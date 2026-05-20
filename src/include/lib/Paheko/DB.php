@@ -19,15 +19,15 @@ class DB extends SQLite3
 
 	static protected $_instance = null;
 
-	protected $_version = -1;
+	protected ?string $_version = '';
 
-	static protected $unicode_patterns_cache = [];
+	static protected array $unicode_patterns_cache = [];
 
-	protected $_log_last = null;
-	protected $_log_start = null;
-	protected $_log_store = [];
+	protected ?float $_log_last = null;
+	protected ?float $_log_start = null;
+	protected array $_log_store = [];
 
-	protected $_schema_update = 0;
+	protected int $_schema_update = 0;
 
 	protected bool $_install_check = true;
 
@@ -78,7 +78,7 @@ class DB extends SQLite3
 		// Enable SQL debug log if configured
 		if (SQL_DEBUG || ENABLE_PROFILER) {
 			$this->callback = [$this, 'log'];
-			$this->_log_start = $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true);
+			$this->_log_start = (float) ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true));
 		}
 	}
 
@@ -189,7 +189,7 @@ class DB extends SQLite3
 		$db = new SQLite3('sqlite', ['file' => SQL_DEBUG]);
 		$s = $db->first('SELECT * FROM sessions WHERE id = ?;', $id);
 
-		if ($s) {
+		if (is_object($s)) {
 			$s->list = $db->get('SELECT * FROM log WHERE session = ? ORDER BY time;', $id);
 
 			foreach ($s->list as &$row) {
@@ -236,7 +236,7 @@ class DB extends SQLite3
 
 	public function connect(bool $check_installed = true): void
 	{
-		if (null !== $this->db) {
+		if (isset($this->db)) {
 			return;
 		}
 
@@ -268,7 +268,19 @@ class DB extends SQLite3
 		}
 
 		self::registerCustomFunctions($this->db);
+		$this->enableSafetyAuthorizer();
+	}
+
+	public function enableSafetyAuthorizer(): void
+	{
+		$this->connect();
 		self::toggleAuthorizer($this->db, true);
+	}
+
+	public function disableSafetyAuthorizer(): void
+	{
+		$this->connect();
+		self::toggleAuthorizer($this->db, false);
 	}
 
 	static public function toggleAuthorizer($db, bool $enable): void
@@ -312,8 +324,8 @@ class DB extends SQLite3
 		$db->createFunction('basename', [Utils::class, 'basename']);
 		$db->createFunction('unicode_like', [self::class, 'unicodeLike']);
 		$db->createFunction('transliterate_to_ascii', [Utils::class, 'unicodeTransliterate']);
-		$db->createFunction('email_hash', [Email::class, 'getHash']);
-		$db->createFunction('md5', 'md5');
+		$db->createFunction('email_hash', fn($v) => empty($v) ? '' : Email::getHash((string)$v));
+		$db->createFunction('md5', fn ($v) => is_null($v) ? null : md5($v));
 		$db->createFunction('uuid', [Utils::class, 'uuid']);
 		$db->createFunction('random_string', [Utils::class, 'random_string']);
 		$db->createFunction('print_binary', fn($value) => sprintf('%032d', decbin($value)));
@@ -394,7 +406,7 @@ class DB extends SQLite3
 
 	public function version(): ?string
 	{
-		if (-1 === $this->_version) {
+		if ('' === $this->_version) {
 			$this->connect();
 			$this->_version = self::getVersion($this->db);
 		}
@@ -402,7 +414,7 @@ class DB extends SQLite3
 		return $this->_version;
 	}
 
-	static public function getVersion($db)
+	static public function getVersion($db): ?string
 	{
 		$v = (int) $db->querySingle('PRAGMA user_version;');
 

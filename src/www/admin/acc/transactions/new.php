@@ -36,6 +36,7 @@ $id_project = null;
 $linked_users = null;
 $linked_transactions = null;
 $payoff = null;
+$linked_users_is_required = false;
 
 $lines = [[], []];
 
@@ -51,7 +52,6 @@ if (qg('copy')) {
 
 	if (empty($_POST)) {
 		$lines = $transaction->getLinesWithAccounts();
-		$types_details = $transaction->getTypesDetails();
 	}
 
 	$id_project = $old->getProjectId();
@@ -64,7 +64,7 @@ elseif (qg('payoff')) {
 	$list = explode(',', qg('payoff'));
 
 	// Quick pay-off for debts and credits, directly from a debt/credit details page
-	$payoff = Transactions::createPayoffFrom($list);
+	$payoff = Transactions::createPayoffFrom($list, $current_year);
 	$transaction = $payoff->transaction;
 	$linked_users = $payoff->linked_users;
 	$linked_transactions = $payoff->linked_transactions;
@@ -81,16 +81,24 @@ else {
 	}
 }
 
-$form->runIf(f('lines') !== null, function () use (&$lines) {
+$form->runIf(($_POST['lines'] ?? null) !== null, function () use (&$lines) {
 	$lines = Transaction::getFormLines();
 });
 
 // Keep this line here, as the transaction can be overwritten by copy
 $transaction->id_year = $current_year->id();
+
+// This is required for fetching the account selector value
+if (isset($_POST['type'])) {
+	$transaction->type = intval($_POST['type']);
+}
+
 $types_details = $transaction->getTypesDetails();
 
 // Set last used date
-if (empty($transaction->date) && $session->get('acc_last_date') && $date = Date::createFromFormat('!Y-m-d', $session->get('acc_last_date'))) {
+if (empty($transaction->date)
+	&& $session->get('acc_last_date')
+	&& ($date = Date::createFromFormat('!Y-m-d', $session->get('acc_last_date')))) {
 	$transaction->date = $date;
 }
 // Set date of the day if no date was set
@@ -103,26 +111,6 @@ if ($transaction->date < $current_year->start_date || $transaction->date > $curr
 	$transaction->date = $current_year->start_date;
 }
 
-// Quick transaction from an account journal page
-if ($id = qg('account')) {
-	$account = $accounts::get($id);
-
-	if (!$account || $account->id_chart != $current_year->id_chart) {
-		throw new UserException('Ce compte ne correspond pas à l\'exercice comptable ou n\'existe pas');
-	}
-
-	$transaction->type = Transaction::getTypeFromAccountType($account->type);
-	$index = $transaction->type == Transaction::TYPE_DEBT || $transaction->type == Transaction::TYPE_CREDIT ? 1 : 0;
-	$s = [$account->id => sprintf('%s — %s', $account->code, $account->label)];
-
-	if ($transaction->type) {
-		$types_details[$transaction->type]->accounts[$index]->selector_value = $s;
-	}
-	else {
-		$lines = [['account_selector' => $s], []];
-	}
-}
-
 $form->runIf('save', function () use ($transaction, $session, $payoff) {
 	if ($payoff) {
 		$transaction->importFromPayoffForm($payoff);
@@ -130,6 +118,8 @@ $form->runIf('save', function () use ($transaction, $session, $payoff) {
 	else {
 		$transaction->importFromNewForm();
 	}
+
+	$transaction->validateUsingConfig(Config::getInstance());
 
 	$transaction->id_creator = $session->getUser()->id;
 	$transaction->save();
@@ -158,7 +148,8 @@ $form->runIf('save', function () use ($transaction, $session, $payoff) {
 }, $csrf_key);
 
 $projects = Projects::listAssoc();
-$variables = compact('csrf_key', 'transaction', 'amount', 'lines', 'id_project', 'types_details', 'linked_users', 'linked_transactions', 'chart', 'projects', 'payoff');
+$variables = compact('csrf_key', 'transaction', 'amount', 'lines', 'id_project', 'types_details',
+	'linked_users', 'linked_transactions', 'chart', 'projects', 'payoff', 'linked_users_is_required');
 
 $tpl->assign($variables);
 

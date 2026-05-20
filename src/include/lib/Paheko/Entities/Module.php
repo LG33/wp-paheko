@@ -9,6 +9,7 @@ use Paheko\UserException;
 use Paheko\ValidationException;
 use Paheko\Utils;
 use Paheko\Files\Files;
+use Paheko\UserTemplate\Modules;
 use Paheko\UserTemplate\UserTemplate;
 use Paheko\Users\Session;
 use Paheko\Web\Cache;
@@ -19,7 +20,9 @@ use KD2\ZipWriter;
 use Paheko\Entities\Files\File;
 use Paheko\Entities\Users\Category;
 
-use const Paheko\{ROOT, WWW_URL, BASE_URL};
+use stdClass;
+
+use const Paheko\{ROOT, WWW_URL, BASE_URL, PLUGINS_BLOCKLIST};
 
 class Module extends Entity
 {
@@ -80,9 +83,22 @@ class Module extends Entity
 
 	protected ?\stdClass $_ini;
 
+	protected ?string $_broken_message = null;
+
+	public function assertIsValid(): void
+	{
+		$this->assert($this->isValid(), 'Nom unique de module invalide: ' . $this->name);
+	}
+
+	public function isValid(): bool
+	{
+		return (bool) preg_match(self::VALID_NAME_REGEXP, $this->name);
+	}
+
 	public function selfCheck(): void
 	{
-		$this->assert(preg_match(self::VALID_NAME_REGEXP, $this->name), 'Nom unique de module invalide: ' . $this->name);
+		$this->assert(!$this->_broken_message, $this->_broken_message);
+		$this->assertIsValid();
 		$this->assert(trim($this->label) !== '', 'Le libellé ne peut rester vide');
 		$this->assert(!isset($this->author_url) || preg_match('!^(?:https?://|mailto:)!', $this->author_url), 'L\'adresse du site de l\'auteur est invalide');
 
@@ -96,7 +112,15 @@ class Module extends Entity
 
 		if (!$this->exists()) {
 			$this->assert(!DB::getInstance()->test(self::TABLE, 'name = ?', $this->name), 'Un module existe déjà avec ce nom unique');
+			$this->assert(!DB::getInstance()->test(Plugin::TABLE, 'name = ?', $this->name), 'Un plugin existe déjà avec ce nom unique');
 		}
+	}
+
+	public function selfCheckUser(): void
+	{
+		$this->assert(!Modules::distExists($this->name), 'Un module existe déjà avec ce nom unique');
+		$this->assert(!Plugins::exists($this->name), 'Un plugin existe déjà avec ce nom unique');
+		$this->assert(!in_array($this->name, PLUGINS_BLOCKLIST ?? [], true), 'Ce nom unique de module ne peut être utilisé, merci d\'en choisir un autre');
 	}
 
 	public function importForm(?array $source = null)
@@ -113,7 +137,34 @@ class Module extends Entity
 		parent::importForm($source);
 	}
 
-	public function getINIProperties(bool $use_local = true): ?\stdClass
+	public function setBrokenMessage(string $message): void
+	{
+		$this->_broken_message = $message;
+	}
+
+	public function getBrokenMessage(): ?string
+	{
+		return $this->_broken_message;
+	}
+
+	public function isBroken(): bool
+	{
+		if ($this->_broken_message !== null) {
+			return true;
+		}
+
+		try {
+			$this->selfCheck();
+		}
+		catch (ValidationException $e) {
+			$this->_broken_message = $e->getMessage();
+			return true;
+		}
+
+		return false;
+	}
+
+	public function getINIProperties(bool $use_local = true): ?stdClass
 	{
 		if (isset($this->_ini) && $use_local) {
 			return $this->_ini;
@@ -128,6 +179,7 @@ class Module extends Entity
 			$from_dist = true;
 		}
 		else {
+			$this->setBrokenMessage('Le fichier module.ini est absent');
 			return null;
 		}
 
@@ -135,16 +187,24 @@ class Module extends Entity
 			$ini = Utils::parse_ini_string($ini, false);
 		}
 		catch (\RuntimeException $e) {
-			throw new ValidationException(sprintf('Le fichier module.ini est invalide pour "%s" : %s', $this->name, $e->getMessage()), 0, $e);
+			$this->setBrokenMessage(sprintf('Le fichier module.ini est invalide : %s', $e->getMessage()));
+			return null;
 		}
 
 		if (empty($ini)) {
+			$this->setBrokenMessage('Le fichier module.ini est vide');
 			return null;
 		}
 
 		$ini = (object) $ini;
 
 		if (!isset($ini->name)) {
+			$this->setBrokenMessage('Le fichier module.ini est invalide : la clé "name" n\'existe pas');
+			return null;
+		}
+
+		if (isset($ini->min_version)) {
+			$this->setBrokenMessage('Ce module nécessite Paheko 1.4.0 ou supérieur');
 			return null;
 		}
 
@@ -157,6 +217,8 @@ class Module extends Entity
 			$this->_ini = $ini;
 		}
 
+		$ini->allow_user_restrict ??= true;
+
 		return $ini;
 	}
 
@@ -167,7 +229,7 @@ class Module extends Entity
 	{
 		$ini = $this->getINIProperties($use_local);
 
-		if (!$ini) {
+		if (null === $ini) {
 			return false;
 		}
 
@@ -186,6 +248,7 @@ class Module extends Entity
 		$this->set('web', !empty($ini->web));
 		$this->set('home_button', !empty($ini->home_button));
 		$this->set('menu', !empty($ini->menu));
+
 		$this->set('restrict_section', $restrict_section);
 		$this->set('restrict_level', $restrict_level);
 
@@ -314,6 +377,11 @@ class Module extends Entity
 		return Files::exists($this->path($path));
 	}
 
+	public function hasLocalDir(string $path): bool
+	{
+		return Files::getType($this->path($path)) === File::TYPE_DIRECTORY;
+	}
+
 	public function hasDistFile(string $path): bool
 	{
 		return @file_exists($this->distPath($path));
@@ -362,7 +430,7 @@ class Module extends Entity
 
 	public function getDataSize(): int
 	{
-		return (int) DB::getInstance()->getTableSize(sprintf('module_data_%s', $this->name));
+		return (int) DB::getInstance()->getTableSize($this->table_name());
 	}
 
 	public function getConfigSize(): int
@@ -564,7 +632,9 @@ class Module extends Entity
 
 	public function deleteData(): void
 	{
-		DB::getInstance()->exec(sprintf('DROP TABLE IF EXISTS module_data_%s; UPDATE modules SET config = NULL WHERE name = \'%1$s\';', $this->name));
+		$db = DB::getInstance();
+		$table_name = $db->quoteIdentifier($this->table_name());
+		$db->exec(sprintf('DROP TABLE IF EXISTS %s; UPDATE modules SET config = NULL WHERE name = %s;', $table_name, $db->quote($this->name)));
 
 		// Delete all files
 		if ($dir = Files::get($this->storage_root())) {
@@ -604,7 +674,7 @@ class Module extends Entity
 
 	public function template(string $file)
 	{
-		if ($file == self::CONFIG_FILE) {
+		if ($file === self::CONFIG_FILE) {
 			Session::getInstance()->requireAccess(Session::SECTION_CONFIG, Session::ACCESS_ADMIN);
 		}
 
@@ -641,19 +711,14 @@ class Module extends Entity
 				}
 			}
 
-			try {
-				if ($this->web) {
-					$this->serveWeb($path, $params);
-					return;
-				}
-				else {
-					$ut = $this->template($path);
-					$ut->assignArray($params);
-					$ut->serve();
-				}
+			if ($this->web) {
+				$this->serveWeb($path, $params);
+				return;
 			}
-			catch (\LogicException $e) {
-				throw new UserException('This address is invalid.', 404);
+			else {
+				$ut = $this->template($path);
+				$ut->assignArray($params);
+				$ut->serve();
 			}
 
 			return;
@@ -705,9 +770,23 @@ class Module extends Entity
 
 		unset($signal);
 
-		$ut = $this->template($path);
+		try {
+			$ut = $this->template($path);
+		}
+		catch (\InvalidArgumentException $e) {
+			try {
+				// In case template path does not exist, or is a directory,
+				// we expect 404.html to exist
+				$ut = $this->template('404.html');
+			}
+			catch (\InvalidArgumentException $e) {
+				// Fallback if 404.html does not exist
+				throw new UserException('Page non trouvée. De plus, le squelette "404.html" n\'existe pas.', 404);
+			}
+		}
+
 		$ut->assignArray($params);
-		$content = $ut->fetch();
+		$content = $ut->fetchAndCatchErrors();
 		$type = $ut->getContentType();
 		$code = $ut->getStatusCode();
 
@@ -741,10 +820,17 @@ class Module extends Entity
 
 		$ut->dumpHeaders();
 
-		if ($type == 'application/pdf') {
+		if ($type === 'application/pdf') {
 			Utils::streamPDF($content);
 		}
 		else {
+			// For bots
+			if ($type === 'text/html') {
+				$h_url = Router::getHoneypotURL();
+				$link = sprintf('<a href="%s" rel="nofollow noindex" aria-hidden="true" style="display: none; width: 0; height: 0; overflow: hidden;">En savoir plus sur nous</a>', $h_url);
+				$content = preg_replace('/<body.*?>/i', '$0' . $link, $content);
+			}
+
 			echo $content;
 		}
 

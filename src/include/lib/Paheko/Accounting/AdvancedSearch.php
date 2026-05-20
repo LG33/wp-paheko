@@ -76,17 +76,17 @@ class AdvancedSearch extends A_S
 			],
 			'debit' => [
 				'label'    => 'Débit',
-				'type'     => 'text',
+				'type'     => 'money',
 				'null'     => false,
 				'select'   => 'l.debit',
-				'normalize' => 'money',
+				'input'    => 'text',
 			],
 			'credit' => [
 				'label'    => 'Crédit',
-				'type'     => 'text',
+				'type'     => 'money',
 				'null'     => false,
 				'select'   => 'l.credit',
-				'normalize' => 'money',
+				'input'    => 'text',
 			],
 			'line_label' => [
 				'label'    => 'Libellé ligne',
@@ -162,6 +162,12 @@ class AdvancedSearch extends A_S
 				'select' => 'l.reconciled',
 				'where'  => 'l.reconciled %s',
 			],
+			'letter' => [
+				'type'   => 'text',
+				'label'  => 'Lettrage',
+				'null'   => true,
+				'select' => 'll.letter',
+			],
 		];
 	}
 
@@ -211,21 +217,21 @@ class AdvancedSearch extends A_S
 			];
 		}
 
-		// Match number: find transactions per credit or debit
-		if (preg_match('/^=\s*\d+([.,]\d+)?$/', $text))
-		{
-			$text = ltrim($text, "\n\t =");
+		// Match amount: find transactions per credit or debit
+		if (preg_match('/^(>=|<=|=|>|<)\s*(\d+(?:[.,]\d+)?)$/', $text, $match)) {
+			$operator = $match[1];
+			$text = $match[2];
 			$query[] = [
 				'operator' => 'OR',
 				'conditions' => [
 					[
 						'column'   => 'debit',
-						'operator' => '= ?',
+						'operator' => $operator . ' ?',
 						'values'   => [$text],
 					],
 					[
 						'column'   => 'credit',
-						'operator' => '= ?',
+						'operator' => $operator . ' ?',
 						'values'   => [$text],
 					],
 					[
@@ -236,8 +242,8 @@ class AdvancedSearch extends A_S
 			];
 		}
 		// Match date
-		elseif (preg_match('!^\d{2}/\d{2}/\d{4}$!', $text) && ($d = Utils::get_datetime($text)))
-		{
+		elseif (preg_match('!^\d{2}/\d{2}/\d{4}$!', $text)
+			&& ($d = Utils::parseDateTime($text))) {
 			$query[] = [
 				'operator' => 'OR',
 				'conditions' => [
@@ -250,8 +256,7 @@ class AdvancedSearch extends A_S
 			];
 		}
 		// Or search in label or reference
-		else
-		{
+		else {
 			$operator = 'LIKE %?%';
 			$query[] = [
 				'operator' => 'OR',
@@ -299,6 +304,7 @@ class AdvancedSearch extends A_S
 			'acc_charts',
 			'acc_transactions_users',
 			'acc_transactions_links',
+			'acc_letters',
 		]);
 	}
 
@@ -308,8 +314,20 @@ class AdvancedSearch extends A_S
 			INNER JOIN acc_transactions_lines AS l ON l.id_transaction = t.id
 			INNER JOIN acc_accounts AS a ON l.id_account = a.id
 			INNER JOIN acc_years AS y ON t.id_year = y.id
-			LEFT JOIN acc_projects AS p ON l.id_project = p.id';
-		return $this->makeList($query, $tables, 'id', true, ['id', 'id_line', 'account_code', 'debit', 'credit']);
+			LEFT JOIN acc_projects AS p ON l.id_project = p.id
+			LEFT JOIN acc_letters AS ll ON l.id_letter = ll.id';
+
+		$list = $this->makeList($query, $tables, 'id', true, ['id', 'id_line', 'account_code', 'debit', 'credit']);
+		$list->setExportCallback(function (&$row) {
+			if (isset($row->debit)) {
+				$row->debit = Utils::money_format($row->debit);
+			}
+
+			if (isset($row->credit)) {
+				$row->credit = Utils::money_format($row->credit);
+			}
+		});
+		return $list;
 	}
 
 	public function defaults(): \stdClass

@@ -72,6 +72,14 @@ class AdvancedSearch extends A_S
 			'where' => 'u.id_parent IS NOT NULL %s',
 		];
 
+		$columns['has_password'] = [
+			'label' => 'A un mot de passe',
+			'type' => 'boolean',
+			'null' => false,
+			'select' => 'CASE WHEN u.password IS NOT NULL THEN \'Oui\' ELSE \'Non\' END',
+			'where' => 'u.password IS NOT NULL %s',
+		];
+
 		foreach ($fields->all() as $name => $field)
 		{
 			// Skip password/number as it's already in the list
@@ -100,10 +108,12 @@ class AdvancedSearch extends A_S
 				$column['order'] = sprintf('%s COLLATE U_NOCASE %%s', $identifier);
 			}
 
-			if ($field->type == 'checkbox')
-			{
+			if ($field->type == 'checkbox') {
 				$column['type'] = 'boolean';
 				$column['null'] = false;
+			}
+			elseif ($field->type == 'boolean') {
+				$column['type'] = 'boolean';
 			}
 			elseif ($field->type == 'select')
 			{
@@ -143,9 +153,8 @@ class AdvancedSearch extends A_S
 				$column['type'] = $type;
 				$column['null'] = $field->hasNullValues();
 			}
-
-			if ($field->type == 'tel') {
-				$column['normalize'] = 'tel';
+			elseif ($field->type == 'tel') {
+				$column['type'] = 'tel';
 			}
 
 			$columns[$name] = $column;
@@ -225,6 +234,12 @@ class AdvancedSearch extends A_S
 			'null'  => true,
 		];
 
+		$columns['date_updated'] = [
+			'label' => 'Date de modification de la fiche',
+			'type'  => 'date',
+			'null'  => true,
+		];
+
 		return $columns;
 	}
 
@@ -277,14 +292,6 @@ class AdvancedSearch extends A_S
 		}
 
 		$groups = [[
-			'operator' => 'AND',
-			'conditions' => [
-				[
-					'column'   => 'hidden',
-					'operator' => '= 0',
-				],
-			],
-		], [
 			'operator' => 'OR',
 			'conditions' => [
 				[
@@ -294,6 +301,42 @@ class AdvancedSearch extends A_S
 				],
 			],
 		]];
+
+		$exclude_hidden = true;
+
+		// Don't include hidden users in search result,
+		// unless we want a specific category or ALL users
+		if (intval($options['id_category'] ?? 0) === -1) {
+			$exclude_hidden = false;
+		}
+		elseif (!empty($options['id_category'])) {
+			$exclude_hidden = false;
+
+			$groups[] = [
+				'operator' => 'AND',
+				'join_operator' => 'AND',
+				'conditions' => [
+					[
+						'column'   => 'id_category',
+						'operator' => '= ?',
+						'values'   => [intval($options['id_category'])],
+					],
+				],
+			];
+		}
+
+		if ($exclude_hidden) {
+			$groups[] = [
+				'operator' => 'AND',
+				'join_operator' => 'AND',
+				'conditions' => [
+					[
+						'column'   => 'hidden',
+						'operator' => '= 0',
+					],
+				],
+			];
+		}
 
 		if (!DynamicFields::isNumberFieldANumber()) {
 			$groups[0]['conditions'][] = [
@@ -315,7 +358,7 @@ class AdvancedSearch extends A_S
 		$tables = 'users_view AS u INNER JOIN users_search AS us USING (id)';
 		$list = $this->makeList($query, $tables, 'identity', false, ['id', 'identity', 'number']);
 
-		$list->setExportCallback([Users::class, 'exportRowCallback']);
+		$list->setExportCallback([Export::class, 'exportRowCallback']);
 		return $list;
 	}
 

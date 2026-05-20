@@ -53,25 +53,28 @@ class Transactions
 		$db->commit();
 	}
 
-	static public function saveDeposit(Transaction $transaction, \Generator $journal, array $checked)
+	static public function saveDeposit(Account $account, Transaction $transaction, \Generator $journal, array $checked)
 	{
 		$db = DB::getInstance();
 		$db->begin();
 
 		try {
-			$ids = [];
+			$transactions_ids = [];
+			$lines_ids = [];
+
 			foreach ($journal as $row) {
-				if (!array_key_exists($row->id_line, $checked)) {
+				if (!in_array($row->id_line, $checked)) {
 					continue;
 				}
 
-				$ids[] = (int)$row->id;
+				$transactions_ids[] = (int)$row->id;
+				$lines_ids[] = $row->id_line;
 
 				$line = new Line;
 				$line->importForm([
 					'reference'  => $row->line_reference,
 					'label'      => $row->line_label ?? $row->label,
-					'id_account' => $row->id_account,
+					'id_account' => $account->id(),
 					'id_project' => $row->id_project,
 				]);
 
@@ -81,8 +84,8 @@ class Transactions
 			}
 
 			$transaction->save();
-			$ids = implode(',', $ids);
-			$db->exec(sprintf('UPDATE acc_transactions SET status = (status | %d) WHERE id IN (%s);', Transaction::STATUS_DEPOSITED, $ids));
+			$transaction->updateLinkedTransactions($transactions_ids);
+			$account->markLinesAsDeposited($lines_ids);
 			$db->commit();
 		}
 		catch (\Exception $e) {
@@ -101,6 +104,11 @@ class Transactions
 		return DB::getInstance()->count('acc_transactions', 'id_creator = ?', $user_id);
 	}
 
+	static public function countAll(): int
+	{
+		return DB::getInstance()->count('acc_transactions');
+	}
+
 	/**
 	 * Returns a dynamic list of all waiting credit and debt transactions for closed years
 	 */
@@ -117,7 +125,8 @@ class Transactions
 			$columns['id_project'],
 			$columns['line_reference'],
 			$columns['locked'],
-			$columns['files']
+			$columns['files'],
+			$columns['letter']
 		);
 
 		$columns['change']['select'] = 'SUM(l.credit)';
@@ -147,7 +156,6 @@ class Transactions
 
 		$list = new DynamicList($columns, $tables, $conditions);
 		$list->orderBy('date', true);
-		$list->setCount('COUNT(DISTINCT t.id)');
 		$list->groupBy('t.id');
 		$list->setModifier(function (&$row) {
 			$row->date = \DateTime::createFromFormat('!Y-m-d', $row->date);
@@ -195,7 +203,8 @@ class Transactions
 			$columns['line_label'],
 			$columns['sum'],
 			$columns['debit'],
-			$columns['credit']
+			$columns['credit'],
+			$columns['letter']
 		);
 
 		$db = DB::getInstance();
@@ -205,7 +214,19 @@ class Transactions
 			unset($columns['locked']);
 		}
 
-		$columns['line_reference']['label'] = 'Réf. paiement';
+		$types_with_ref = [
+			Transaction::TYPE_REVENUE,
+			Transaction::TYPE_EXPENSE,
+			Transaction::TYPE_TRANSFER,
+		];
+
+		if (in_array($type, $types_with_ref)) {
+			$columns['line_reference']['label'] = 'Réf. paiement';
+		}
+		else {
+			unset($columns['line_reference']);
+		}
+
 		$columns['change']['select'] = sprintf('SUM(l.credit) * %d', $reverse);
 		$columns['change']['label'] = 'Montant';
 		$columns['project_code']['select'] = 'json_group_array(IFNULL(b.code, SUBSTR(b.label, 1, 10) || \'…\'))';
@@ -243,7 +264,6 @@ class Transactions
 
 		$list = new DynamicList($columns, $tables, $conditions);
 		$list->orderBy('date', true);
-		$list->setCount('COUNT(t.id)');
 		$list->setCountTables('acc_transactions t');
 		$list->groupBy('t.id');
 		$list->setModifier(function (&$row) {
@@ -293,7 +313,7 @@ class Transactions
 		return DB::getInstance()->iterate($sql, ...$params);
 	}
 
-	static public function createPayoffFrom(array $transactions): ?\stdClass
+	static public function createPayoffFrom(array $transactions, Year $year): ?\stdClass
 	{
 		$new = new Transaction;
 
@@ -312,6 +332,7 @@ class Transactions
 		];
 
 		$labels = [];
+		$accounts = $year->accounts();
 
 		foreach ($transactions as $id) {
 			$id = (int) $id;
@@ -365,12 +386,22 @@ class Transactions
 
 			if ($out->type === Transaction::TYPE_CREDIT) {
 				$line->credit = $sum;
-				$line->id_account = $t->getDebitLine()->id_account;
+				$id_account = $t->getDebitLine()->id_account;
 			}
 			else {
 				$line->debit = $sum;
-				$line->id_account = $t->getCreditLine()->id_account;
+				$id_account = $t->getCreditLine()->id_account;
 			}
+
+			// Make sure account ID is valid for this chart
+			$valid_id_account = $accounts->getValidAccountId($id_account);
+
+			if (!$valid_id_account) {
+				$account = $accounts::get($id_account);
+				throw new UserException(sprintf('Le compte "%s — %s" n\'existe pas dans le plan comptable de l\'année sélectionnée.', $account->code, $account->label));
+			}
+
+			$line->id_account = $valid_id_account;
 
 			$new->addLine($line);
 		}
@@ -403,5 +434,103 @@ class Transactions
 		$new->type = 99;
 
 		return $out;
+	}
+
+	/**
+	 * Delete letter
+	 */
+	static public function deleteLetter(int $id_year, string $letter): void
+	{
+		$db = DB::getInstance();
+		// This should set all id_letter to NULL in acc_transactions_lines
+		$db->delete('acc_letters', 'id_year = ? AND letter = ?', $id_year, $letter);
+	}
+
+	/**
+	 * Create a new letter linking all the lines IDs passed as parameter
+	 *
+	 * A letter can only be created if:
+	 * - all lines have the same account
+	 * - all lines transactions are in the same year
+	 * - all lines don't already have a letter
+	 * - the letter ('A', 'AA'…) doesn't already exist for this year
+	 */
+	static public function createLetter(array $ids): int
+	{
+		$db = DB::getInstance();
+
+		$ids = array_map('intval', $ids);
+		$where_ids = $db->where('id', 'IN', $ids);
+		$sql = sprintf('SELECT l.id, l.debit, l.credit, l.id_account, t.id_year, l.id_letter
+			FROM acc_transactions_lines l
+			INNER JOIN acc_transactions t ON t.id = l.id_transaction
+			WHERE l.%s;',
+			$where_ids
+		);
+
+		$lines = $db->get($sql);
+
+		if (count($lines) !== count($ids)) {
+			throw new UserException('Une ligne sélectionnée n\'existe plus');
+		}
+
+		$id_account = current($lines)->id_account;
+		$id_year = current($lines)->id_year;
+
+		if (!$db->test('acc_years', 'id = ? AND status = ?', $id_year, Year::OPEN)) {
+			throw new \LogicException('This transaction line year is not open');
+		}
+
+		// Find new letter (each letter is unique for each year)
+		$max_letter = $db->firstColumn('SELECT letter FROM acc_letters WHERE id_year = ?
+			ORDER BY LENGTH(letter) DESC, letter DESC LIMIT 1;', $id_year);
+
+		if (!$max_letter) {
+			$i = 0;
+		}
+		else {
+			$i = Utils::alpha2num($max_letter);
+			$i++;
+		}
+
+		$letter = Utils::num2alpha($i);
+
+		if ($db->test('acc_letters', 'id_year = ? AND letter = ?', $id_year, $letter)) {
+			throw new \LogicException(sprintf('This letter is already attributed: %s (id_year = %d)', $letter, $id_year));
+		}
+
+		$total = 0;
+		$db->begin();
+
+		// Create letter
+		$db->insert('acc_letters', compact('id_year', 'letter'));
+		$id_letter = $db->lastInsertId();
+
+		foreach ($lines as $line) {
+			// a letter CAN ONLY be attributed to lines of the same account and year
+			if ($line->id_account !== $id_account) {
+				throw new \LogicException('Cannot letter lines linked to different accounts');
+			}
+
+			if ($line->id_year !== $id_year) {
+				throw new \LogicException('Cannot letter lines linked to different accounts');
+			}
+
+			if ($line->id_letter) {
+				throw new UserException('Impossible de lettrer une écriture qui est déjà lettrée');
+			}
+
+			$db->update('acc_transactions_lines', compact('id_letter'), 'id = ' . (int) $line->id);
+			$total += $line->credit;
+			$total -= $line->debit;
+		}
+
+		if ($total) {
+			$db->rollback();
+			throw new UserException('Les lignes sélectionnées ne sont pas équilibrées.');
+		}
+
+		$db->commit();
+		return $id_letter;
 	}
 }

@@ -27,6 +27,7 @@ use Paheko\Users\Users;
 use Paheko\Services\Services_User;
 
 use Paheko\Entities\Files\File;
+use Paheko\Entities\Email\Email;
 
 use KD2\Security;
 use KD2\Security_OTP;
@@ -36,7 +37,7 @@ use KD2\DB\Date;
 use KD2\ZipWriter;
 use KD2\Graphics\QRCode;
 
-use const Paheko\{WWW_URL, LOCAL_LOGIN};
+use const Paheko\{WWW_URL, LOCAL_LOGIN, ENABLE_PERMISSIONS};
 
 /**
  * WARNING: do not use $user->property = 'value' to set a property value on this class
@@ -61,10 +62,13 @@ class User extends Entity
 		'accounting_expert' => false,
 		'dark_theme'        => false,
 		'force_handheld'	=> false,
+		// Category displayed when going to users list
+		'users_category'    => 0,
 	];
 
 	protected bool $_loading = false;
-	protected Category $_category;
+	protected ?Category $_category = null;
+	protected ?array $_permissions = null;
 
 	public function __construct()
 	{
@@ -107,7 +111,8 @@ class User extends Entity
 		$this->reloadProperties();
 	}
 
-	public function set(string $key, $value) {
+	public function set(string $key, $value)
+	{
 		if ($this->_loading && $value === null) {
 			$this->$key = $value;
 			return;
@@ -156,8 +161,11 @@ class User extends Entity
 			if ($field->required) {
 				$this->assert(null !== $value, sprintf('"%s" : ce champ est requis', $field->label));
 
-				if (is_bool($value)) {
+				if ($field->type === 'checkbox') {
 					$this->assert($value === true, sprintf('"%s" : ce champ doit être coché', $field->label));
+				}
+				elseif ($field->type === 'boolean') {
+					$this->assert($value === true || $value === false, sprintf('"%s" : ce champ doit être sélectionné', $field->label));
 				}
 				elseif (!is_array($value) && !is_object($value) && !is_bool($value)) {
 					$this->assert('' !== trim((string)$value), sprintf('"%s" : ce champ ne peut être vide', $field->label));
@@ -177,6 +185,9 @@ class User extends Entity
 			}
 			elseif ($field->type === 'checkbox') {
 				$this->assert($value === false || $value === true, sprintf('"%s" : la valeur de ce champ n\'est pas valide.', $field->label));
+			}
+			elseif ($field->type === 'boolean') {
+				$this->assert($value === false || $value === true || $value === null, sprintf('"%s" : la valeur de ce champ n\'est pas valide.', $field->label));
 			}
 			elseif ($field->type === 'select') {
 				$this->assert(in_array($value, $field->options), sprintf('"%s" : la valeur "%s" ne fait pas partie des options possibles', $field->label, $value));
@@ -329,11 +340,29 @@ class User extends Entity
 			Plugins::fire('user.change.login.after', false, ['user' => $this, 'old_login' => $login_modified]);
 		}
 
+		$this->reloadSessionIfNeeded();
+
 		return true;
+	}
+
+	protected function reloadSessionIfNeeded(): void
+	{
+		$session = Session::getInstance();
+
+		// Reload session data if the modified user is the logged-in user
+		if ($session->isLogged(false)
+			&& $session->user()
+			&& $session->user()->id === $this->id) {
+			$session->refresh();
+		}
 	}
 
 	public function category(): Category
 	{
+		if (!$this->id_category) {
+			throw new \LogicException('This user has no category');
+		}
+
 		$this->_category ??= Categories::get($this->id_category);
 		return $this->_category;
 	}
@@ -343,7 +372,7 @@ class User extends Entity
 		return File::CONTEXT_USER . '/' . $this->id();
 	}
 
-	public function listFiles(string $field_name = null): array
+	public function listFiles(?string $field_name = null): array
 	{
 		return Files::listForUser($this->id, $field_name);
 	}
@@ -370,8 +399,9 @@ class User extends Entity
 
 		$n = Users::getNewNumber();
 
-		if (null === $n) {
-			throw new UserException("Le dernier numéro de membre ne comporte pas que des chiffres.\nImpossible d'attribuer automatiquement un numéro de membre.");
+		if (null === $n
+			|| !DynamicFields::isNumberFieldANumber()) {
+			throw new UserException("Le numéro de membre n'est pas numérique.\nImpossible d'attribuer automatiquement un numéro de membre quand le numéro de membre peut contenir du texte.");
 		}
 
 		$this->set($field, $n);
@@ -404,6 +434,9 @@ class User extends Entity
 		if (isset($source['id_parent']) && is_array($source['id_parent'])) {
 			$source['id_parent'] = Form::getSelectorValue($source['id_parent']);
 		}
+		elseif (isset($source['parent_number'])) {
+			$source['id_parent'] = Users::getIdFromNumber($source['parent_number']);
+		}
 
 		foreach (DynamicFields::getInstance()->fieldsByType('multiple') as $f) {
 			if (!(isset($source[$f->name . '_present']) || isset($source[$f->name]))) {
@@ -435,6 +468,15 @@ class User extends Entity
 			}
 
 			$source[$f->name] = !empty($source[$f->name]);
+		}
+
+		// Handle boolean fields
+		foreach (DynamicFields::getInstance()->fieldsByType('boolean') as $f) {
+			if (!array_key_exists($f->name, $source)) {
+				continue;
+			}
+
+			$source[$f->name] = $source[$f->name] === '' ? null : (bool) $source[$f->name];
 		}
 
 		foreach (DynamicFields::getInstance()->fieldsByType('country') as $f) {
@@ -550,6 +592,19 @@ class User extends Entity
 		return $out;
 	}
 
+	public function isOTPRequired(): bool
+	{
+		if (!$this->id_category) {
+			return false;
+		}
+
+		if (!$this->otp_secret && $this->category()->force_otp) {
+			return true;
+		}
+
+		return false;
+	}
+
 	public function deletePassword(): void
 	{
 		$this->set('password', null);
@@ -575,6 +630,10 @@ class User extends Entity
 		$this->assert(!$session->isPasswordCompromised($source['password']), 'Le mot de passe choisi figure dans une liste de mots de passe compromis (piratés), il ne peut donc être utilisé ici. Si vous l\'avez utilisé sur d\'autres sites il est recommandé de le changer sur ces autres sites également.');
 
 		$this->set('password', $session->hashPassword($source['password']));
+
+		if ($session->isLogged(false)) {
+			$session->clearSessionVerifier();
+		}
 	}
 
 	public function isHidden(): bool
@@ -600,6 +659,18 @@ class User extends Entity
 
 		return $out;
 	}
+
+	public function getEmailObject(): ?Email
+	{
+		foreach (DynamicFields::getEmailFields() as $f) {
+			if (isset($this->$f) && trim($this->$f)) {
+				return Emails::getOrCreateEmail($this->$f);
+			}
+		}
+
+		return null;
+	}
+
 
 	public function canEmail(): bool
 	{
@@ -692,31 +763,33 @@ class User extends Entity
 		throw new UserException("Le champ identifiant ne peut être laissé vide pour un administrateur, sinon vous ne pourriez plus vous connecter.");
 	}
 
-	public function canChangePassword(?Session $session): bool
+	/**
+	 * Can the user change their own password?
+	 * This used to be dependent upon DynamicField::$user_access_level
+	 * in order to restrict the user from setting its own password.
+	 * This lead to security issues (password re-use between accounts),
+	 * the user should always be able (and have) to set their own password.
+	 * @deprecated
+	 */
+	public function canChangePassword(): bool
 	{
-		if ($session && $session->canAccess($session::SECTION_USERS, $session::ACCESS_ADMIN)) {
-			return true;
+		if (!ENABLE_PERMISSIONS) {
+			return false;
 		}
 
-		$password_field = current(DynamicFields::getInstance()->fieldsBySystemUse('password'));
-		return $password_field->user_access_level === Session::ACCESS_WRITE;
+		return true;
 	}
 
 	public function canRecoverPassword(): bool
 	{
-		// Admins can recover their password all the time
-		if ($this->isSuperAdmin()) {
-			return true;
-		}
-
-		return $this->canChangePassword(null);
+		return $this->canChangePassword();
 	}
 
 	public function checkDuplicate(): ?int
 	{
 		$id_field = DynamicFields::getNameFieldsSQL();
 		$db = DB::getInstance();
-		return $db->firstColumn(sprintf('SELECT id FROM %s WHERE %s = ?;', self::TABLE, $id_field), $this->name()) ?: null;
+		return $db->firstColumn(sprintf('SELECT id FROM %s WHERE %s LIKE ? COLLATE U_NOCASE;', self::TABLE, $id_field), $this->name()) ?: null;
 	}
 
 	public function getPreference(string $key)
@@ -751,7 +824,7 @@ class User extends Entity
 	/**
 	 * Save preferences if they have been modified
 	 */
-	public function __destruct()
+	public function savePreferences(): void
 	{
 		// We can't save preferences if user does not exist (eg. LDAP/Forced Login via LOCAL_LOGIN)
 		if (!$this->exists()) {
@@ -763,9 +836,9 @@ class User extends Entity
 			return;
 		}
 
-
 		DB::getInstance()->update(self::TABLE, ['preferences' => json_encode($this->preferences)], 'id = ' . $this->id());
 		$this->clearModifiedProperties(['preferences']);
+		$this->reloadSessionIfNeeded();
 	}
 
 	public function url(): string
@@ -829,14 +902,12 @@ class User extends Entity
 
 	public function canLogin(): bool
 	{
-		$category = $this->category();
-		return $category->perm_connect >= Session::ACCESS_READ;
+		return $this->getPermissions()[Session::SECTION_CONNECT] >= Session::ACCESS_READ;
 	}
 
 	public function isSuperAdmin(): bool
 	{
-		$category = $this->category();
-		return $category->perm_config === Session::ACCESS_ADMIN;
+		return $this->getPermissions()[Session::SECTION_CONFIG] === Session::ACCESS_ADMIN;
 	}
 
 	/**
@@ -847,14 +918,17 @@ class User extends Entity
 	 */
 	public function canBeModifiedBy(?Session $session = null): bool
 	{
-		$category = $this->category();
+		if ($session && $session->user()->isSuperAdmin()) {
+			return true;
+		}
 
-		if (($category->perm_config === Session::ACCESS_ADMIN)
-			&& (!$session || !$session->canAccess(Session::SECTION_CONFIG, Session::ACCESS_ADMIN))) {
+		$permissions = $this->getPermissions();
+
+		if ($permissions[Session::SECTION_CONFIG] === Session::ACCESS_ADMIN) {
 			return false;
 		}
 
-		if (($category->perm_users === Session::ACCESS_ADMIN)
+		if (($permissions[Session::SECTION_USERS] === Session::ACCESS_ADMIN)
 			&& (!$session || !$session->canAccess(Session::SECTION_USERS, Session::ACCESS_ADMIN))) {
 			return false;
 		}
@@ -871,11 +945,11 @@ class User extends Entity
 
 	/**
 	 * Return true if a manager can change a users password
+	 * Only superadmins can change passwords
 	 */
 	public function canChangePasswordBy(Session $session): bool
 	{
-		$password_field = current(DynamicFields::getInstance()->fieldsBySystemUse('password'));
-		return $session->canAccess($session::SECTION_USERS, $password_field->management_access_level);
+		return $session->user()->isSuperAdmin();
 	}
 
 	public function validatePasswordCanBeChangedBy(Session $session): void
@@ -892,12 +966,16 @@ class User extends Entity
 			return false;
 		}
 
-		// Cannot login if not a superadmin
-		if (!$session->canAccess($session::SECTION_CONFIG, $session::ACCESS_ADMIN)) {
+		if (!ENABLE_PERMISSIONS) {
 			return false;
 		}
 
-		$logged_user = $session->getUser();
+		$logged_user = $session->user();
+
+		// Cannot login if not a superadmin
+		if (!$logged_user->isSuperAdmin()) {
+			return false;
+		}
 
 		// Cannot self-login
 		if ($logged_user->id === $this->id) {
@@ -908,12 +986,6 @@ class User extends Entity
 		if ($this->id_category === $logged_user->id_category) {
 			return false;
 		}
-
-		// Cannot login as a super-admin
-		if ($this->isSuperAdmin()) {
-			return false;
-		}
-
 
 		return true;
 	}
@@ -958,14 +1030,50 @@ class User extends Entity
 		$prefix['has_pgp_key'] = !empty($out['pgp_key']);
 		unset($out['password'], $out['otp_secret'], $out['otp_recovery_codes'], $out['pgp_key']);
 
+		$file_fields = array_keys(DynamicFields::getInstance()->fieldsByType('file'));
+
 		foreach ($out as $key => &$value) {
+			// Export date field as string
 			if ($value instanceof Date || $value instanceof \DateTimeInterface) {
 				$value = $this->getAsString($key);
+			}
+			// Export file field as URLs
+			elseif (in_array($key, $file_fields)) {
+				$value = [];
+
+				foreach ($this->listFiles($key) as $file) {
+					$value[] = $file->name;
+				}
 			}
 		}
 
 		unset($value);
 
 		return array_merge($prefix, $out);
+	}
+
+	public function getPermissions(): array
+	{
+		if ($this->id_category) {
+			$this->_permissions ??= $this->category()->getPermissions();
+		}
+
+		// Set all permissions to NONE
+		if (!isset($this->_permissions)) {
+			$this->setPermissions([]);
+		}
+
+		return $this->_permissions;
+	}
+
+	public function setPermissions(array $permissions): void
+	{
+		$all_permissions = [];
+
+		foreach (Category::PERMISSIONS as $perm => $data) {
+			$all_permissions[$perm] = $permissions[$perm] ?? Session::ACCESS_NONE;
+		}
+
+		$this->_permissions = $all_permissions;
 	}
 }

@@ -143,17 +143,18 @@ class Import
 	 * @param  string     $type    Type of CSV format
 	 * @param  Year       $year    Target year where transactions should be updated or created
 	 * @param  CSV_Custom $csv     CSV object
-	 * @param  int        $user_id Current user ID, the one running the import
+	 * @param  ?int        $user_id Current user ID, the one running the import
 	 * @param  array      $options array of options
 	 * @return ?array
 	 */
-	static public function import(string $type, Year $year, CSV_Custom $csv, int $user_id, array $options = []): ?array
+	static public function import(string $type, Year $year, CSV_Custom $csv, ?int $user_id, array $options = []): ?array
 	{
 		$options_default = [
 			'ignore_ids'      => false,
 			'dry_run'         => false,
 			'return_report'   => false,
 			'auto_create_accounts' => false,
+			'fec_number_per_journal' => false,
 		];
 
 		$o = (object) array_merge($options_default, $options);
@@ -166,6 +167,13 @@ class Import
 
 		$year->assertCanBeModified();
 
+		// Make sure we order FEC files by ID, allowing to handle files where lines of the same transaction
+		// are not contiguous
+		if ($type === Export::FEC
+			&& is_numeric($csv->getLine(2)->id ?? null)) {
+			$csv->orderBy('id');
+		}
+
 		$db = DB::getInstance();
 		$db->begin();
 		Log::add(Log::MESSAGE, ['message' => 'Import d\'écritures comptables'], $user_id);
@@ -174,7 +182,11 @@ class Import
 		$transaction = null;
 		$linked_users = null;
 		$types = array_flip(Transaction::TYPES_NAMES);
-		$group = $csv->hasSelectedColumn('id') ? 'id' : 'reference';
+		$group = $csv->hasSelectedColumn('id') ? ['id'] : ['reference'];
+
+		if ($o->fec_number_per_journal) {
+			$group[] = 'journal';
+		}
 
 		if ($o->return_report) {
 			$report = ['created' => [], 'modified' => [], 'unchanged' => [], 'accounts' => []];
@@ -192,7 +204,7 @@ class Import
 				$row = (object) $row;
 
 				// Import grouped transactions
-				if ($type == Export::GROUPED) {
+				if ($type === Export::GROUPED) {
 					// If a line doesn't have any transaction info: this is a line following the previous transaction
 					$has_transaction = !(empty($row->id)
 						&& empty($row->type)
@@ -215,14 +227,20 @@ class Import
 					}
 				}
 				else {
-					if (!empty($row->$group) && $row->$group != $current_id) {
+					$id = '';
+
+					foreach ($group as $key) {
+						$id .= $row->$key ?? '';
+					}
+
+					if (!empty($id) && $id != $current_id) {
 						if (null !== $transaction) {
 							self::saveImportedTransaction($transaction, $linked_users, $dry_run, $report);
 							$transaction = null;
 							$linked_users = null;
 						}
 
-						$current_id = $row->$group;
+						$current_id = $id;
 					}
 				}
 
@@ -316,7 +334,7 @@ class Import
 				}
 
 				// Add two transaction lines for each CSV line
-				if ($type == Export::SIMPLE) {
+				if ($type === Export::SIMPLE) {
 					if (empty($row->credit_account)) {
 						throw new UserException('Compte de crédit non renseigné');
 					}
@@ -325,16 +343,9 @@ class Import
 						throw new UserException('Compte de crédit non renseigné');
 					}
 
-					$credit_account = $accounts->getIdFromCode($row->credit_account);
+					$credit_account = self::getOrCreateAccountId($accounts, $row->credit_account, null, $o, $report);
+					$debit_account = self::getOrCreateAccountId($accounts, $row->debit_account, null, $o, $report);
 					$debit_account = $accounts->getIdFromCode($row->debit_account);
-
-					if (!$credit_account) {
-						throw new UserException(sprintf('Compte de crédit "%s" inconnu dans le plan comptable', $row->credit_account));
-					}
-
-					if (!$debit_account) {
-						throw new UserException(sprintf('Compte de débit "%s" inconnu dans le plan comptable', $row->debit_account));
-					}
 
 					$data['reference'] = isset($row->p_reference) ? $row->p_reference : null;
 
@@ -366,20 +377,7 @@ class Import
 					$linked_users = null;
 				}
 				else {
-					$id_account = $accounts->getIdFromCode($row->account);
-
-					if (!$id_account && $row->account && $o->auto_create_accounts) {
-						$account = $accounts->createAuto($row->account, $row->account_label ?? $row->account . ' — Compte créé automatiquement');
-						$account->save();
-						$id_account = $account->id();
-
-						if ($report !== null) {
-							$report['accounts'][] = $account;
-						}
-					}
-					elseif (!$id_account) {
-						throw new UserException(sprintf('le compte "%s" n\'existe pas dans le plan comptable', $row->account));
-					}
+					$id_account = self::getOrCreateAccountId($accounts, $row->account, $row->account_label ?? null, $o, $report);
 
 					$line_label = $row->line_label ?? null;
 					$line_reference = $row->line_reference ?? null;
@@ -393,6 +391,17 @@ class Import
 					// Try to use reference as line reference, if it changes from line to line
 					if (null === $line_reference && isset($row->reference) && $row->reference != $transaction->reference) {
 						$line_reference = $row->reference;
+					}
+
+					// If amount is signed, just reverse debit/credit
+					// (eg. in FEC files, it can happen)
+					if (substr(ltrim($row->credit), 0, 1) === '-') {
+						$row->debit = $row->credit;
+						$row->credit = 0;
+					}
+					elseif (substr(ltrim($row->debit), 0, 1) === '-') {
+						$row->credit = $row->debit;
+						$row->debit = 0;
 					}
 
 					$data = $data + [
@@ -447,5 +456,28 @@ class Import
 		}
 
 		return $report;
+	}
+
+	static protected function getOrCreateAccountId(Accounts $accounts, string $account, ?string $account_label, \stdClass $options, ?array &$report): int
+	{
+		$id_account = $accounts->getIdFromCode($account);
+
+		if ($id_account) {
+			return $id_account;
+		}
+
+		if (!$options->auto_create_accounts) {
+			throw new UserException(sprintf('le compte "%s" n\'existe pas dans le plan comptable', $account));
+		}
+
+		$a = $accounts->createAuto($account, $account_label ?? ($account . ' — Compte créé automatiquement'));
+		$a->save();
+		$id_account = $a->id();
+
+		if ($report !== null) {
+			$report['accounts'][] = $a;
+		}
+
+		return $id_account;
 	}
 }

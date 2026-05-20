@@ -85,7 +85,7 @@ class Form
 		return (count($this->errors) > 0);
 	}
 
-	public function &getErrors()
+	public function getErrors()
 	{
 		return $this->errors;
 	}
@@ -97,7 +97,29 @@ class Form
 
 	public function getErrorMessages()
 	{
-		return $this->errors;
+		$out = [];
+
+		foreach ($this->errors as $e) {
+			if ($e instanceof UserException) {
+				$out[] = $e->getMessage();
+			}
+			else {
+				$out[] = $e;
+			}
+		}
+
+		return $out;
+	}
+
+	public function throwIfErrors(?string $return_url = null): void
+	{
+		if (!$this->hasErrors()) {
+			return;
+		}
+
+		$e = new UserException(implode("\n", $this->getErrorMessages()));
+		$e->setReturnURL($return_url);
+		throw $e;
 	}
 
 	public function __invoke($key)

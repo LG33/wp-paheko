@@ -1,4 +1,4 @@
-{include file="_head.tpl" title="Journal : %s - %s"|args:$account.code:$account.label current="acc/accounts" body_id="rapport"}
+{include file="_head.tpl" title=$title current="acc/accounts" body_id="rapport"}
 
 {if empty($year)}
 	{include file="acc/_year_select.tpl"}
@@ -43,47 +43,47 @@
 		{/if}
 	{/if}
 
-
-	<nav class="tabs">
-		<aside>
-		{if !$filter.start && !$filter.end}
-			{linkbutton shape="search" href="?start=1" label="Filtrer" onclick="g.toggle('#filterForm', true); this.remove(); return false;"}
+	<nav class="actions">
+		{if $can_edit && $account->canLetter()}
+			{linkbutton shape="delete" href="!acc/transactions/letter_delete.php" label="Supprimer un lettrage" target="_dialog"}
 		{/if}
-		{if $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_ADMIN)}
-			{exportmenu}
-		{/if}
-			{linkbutton shape="search" href="!acc/search.php?year=%d&account=%s"|args:$year.id,$account.code label="Recherche"}
+			{linkbutton shape="search" href="!acc/search.php?year=%d&account=%s"|args:$year.id:$account.code label="Rechercher"}
 		{if $year.id == CURRENT_YEAR_ID}
 			{if $account.type == $account::TYPE_BANK}
-				{linkbutton label="Rapprochement" shape="check" href="reconcile.php?id=%d"|args:$account.id}
+				{linkbutton label="Rapprocher" shape="check" href="reconcile.php?id=%d"|args:$account.id}
 			{/if}
-			{linkbutton href="!acc/transactions/new.php?account=%d"|args:$account.id label="Saisie" shape="plus"}
+			{linkbutton href="!acc/transactions/new.php?acc=%s"|args:$account.code label="Saisie" shape="plus"}
 		{/if}
-		</aside>
+		{linkmenu shape="filter" label="Filtrer…"}
+			<form method="get" action="" class="actions">
+			<fieldset>
+				<dl>
+					{input type="date" name="start" source=$filter default=$year.start_date label="Depuis le"}
+					{input type="date" name="end" source=$filter default=$year.end_date label="Jusqu'au"}
+					{if $account->canLetter()}
+					{input type="select" name="letter" label="Lettrage" options=$letter_filter_options default="" required=true source=$filter}
+					{/if}
+				</dl>
+				<input type="hidden" name="id" value="{$account.id}" />
+				<input type="hidden" name="year" value="{$year.id}" />
+			</fieldset>
+			<p class="submit">
+				{button shape="right" label="Filtrer" type="submit"}
+			</p>
+		</form>
+		{/linkmenu}
+		{if $session->canAccess($session::SECTION_ACCOUNTING, $session::ACCESS_ADMIN)}
+			{exportmenu right=true}
+		{/if}
 	</nav>
 {/if}
 
-<form method="get" action="{$self_url}"{if !$filter.start && !$filter.end} class="hidden"{/if} id="filterForm">
-	<fieldset>
-		<legend>Filtrer par date</legend>
-		<p>
-			Du
-			{input type="date" name="start" source=$filter default=$year.start_date}
-			au
-			{input type="date" name="end" source=$filter default=$year.end_date}
-			<input type="hidden" name="id" value="{$account.id}" />
-			<input type="hidden" name="year" value="{$year.id}" />
-			<input type="submit" value="Filtrer" />
-		</p>
-	</fieldset>
-</form>
-
-<form method="post" action="{$admin_url}acc/transactions/actions.php">
+<form method="post" action="{$admin_url}acc/transactions/actions.php?from={$self_url|rawurlencode}">
 
 {include file="common/dynamic_list_head.tpl" check=$can_edit}
 
 	{foreach from=$list->iterate() item="line"}
-		<tr>
+		<tr class="{if $line.letter}disabled{/if}">
 			{if $can_edit}
 			<td class="check">
 				{input type="checkbox" name="check[%s]"|args:$line.id_line value=$line.id}
@@ -101,10 +101,13 @@
 				<td class="money">{$line.sum|raw|money:false}</td>
 			{/if}
 			<td>{$line.reference}</td>
-			<th>{$line.label}{if $simple && $line.line_label} — <em>{$line.line_label}</em>{/if}</th>
+			<th scope="row">{$line.label}{if $simple && $line.line_label} — <em>{$line.line_label}</em>{/if}</th>
 			{if !$simple}<td>{$line.line_label}</td>{/if}
 			<td>{$line.line_reference}</td>
-			<td class="num">{if $line.id_project}<a href="{$admin_url}acc/reports/statement.php?project={$line.id_project}&amp;year={$year.id}">{$line.project_code}</a>{/if}</td>
+			{if $list->hasColumn('letter')}
+				<td>{$line.letter}</td>
+			{/if}
+			<td class="num">{if $line.id_project}{link href="!acc/reports/statement.php?project=%d&year=%d"|args:$line.id_project:$year.id label=$line.project_code|truncate:10}{/if}</td>
 			{if isset($line.locked)}
 			<td>{if $line.locked}{icon title="Écriture verrouillée" shape="lock"}{/if}</td>
 			{/if}
@@ -112,15 +115,6 @@
 			{if isset($line.reconciled)}
 				<td>{if $line.reconciled}{icon title="Rapprochée" shape="check"}{/if}</td>
 			{/if}
-			{* Deposit status, might be consufing
-			<td>
-				{if $account.type === $account::TYPE_OUTSTANDING && $line.debit}
-					{if !($line.status & Entities\Accounting\Transaction::STATUS_DEPOSITED)}
-						{icon shape="alert" title="Cette opération n'a pas été déposée"}
-					{/if}
-				{/if}
-			</td>
-			*}
 			<td class="actions">
 			{if ($line.status & Entities\Accounting\Transaction::STATUS_WAITING)}
 				{if $line.type == Entities\Accounting\Transaction::TYPE_DEBT}
@@ -146,19 +140,19 @@
 				<td><b>Total</b></td>
 				<td class="money">{$sum.debit|raw|money:false}</td>
 				<td class="money">{$sum.credit|raw|money:false}</td>
-				<td class="money"><strong>{$sum.balance|raw|money:false}</strong></td>
+				<td class="money"><strong>{$sum.balance_real|raw|money:false}</strong></td>
 				{else}
 				<td></td>
-				<td colspan="2"><b>Total</b></td>
+				<td><b>Total</b></td>
 				<td class="money"><strong>{$sum.balance|raw|money:false}</strong></td>
 				{/if}
 			{else}
 				<td colspan="4"></td>
 			{/if}
 			{if !$simple}<td></td>{/if}
-			<td class="actions" colspan="6">
+			<td class="actions" colspan="10">
 				{if $can_edit}
-					{include file="acc/_table_actions.tpl"}
+					{include file="acc/_table_actions.tpl" enable_letter=$account->canLetter()}
 				{/if}
 			</td>
 		</tr>

@@ -17,6 +17,17 @@ use Paheko\UserException;
 
 use Paheko\Email\Emails;
 
+/**
+ * This class provides all the commands of the CLI "paheko" command.
+ *
+ * Please note that accessibility rules should be followed:
+ * - don't use progress spinners, or other unicode characters for decorative purposes
+ *   (or make it an option)
+ * - provide a CSV/JSON export option for data outputs (eg. tables)
+ * - CLI documentation should also be available in HTML
+ * - make sure that all commands provide feedback on error or success
+ *   (unless --quiet option is used of course)
+ */
 class CLI
 {
 	const COMMANDS = [
@@ -34,6 +45,7 @@ class CLI
 		'ui',
 		'server',
 		'ext',
+		'security',
 	];
 
 	protected array $defaults = [];
@@ -508,10 +520,169 @@ class CLI
 	}
 
 	/**
+	 * Perform a security check and report for anything unusual, or misconfiguration.
+	 */
+	public function security(array $args)
+	{
+		$o = $this->parseOptions($args, ['--verbose|-v', '--version=']);
+		$verbose = array_key_exists('verbose', $o);
+		$report = Security::getReport($o['version'] ?? null);
+
+		echo 'Restricted open_basedir: ';
+
+		if ($report->open_basedir) {
+			echo $this->color('green', 'enabled');
+			printf(' (%s)', OPEN_BASEDIR);
+		}
+		else {
+			echo $this->color('red', 'DISABLED');
+			echo ' (enabling this helps againts potential issues)';
+		}
+
+		echo "\n";
+
+		echo 'Write permissions: ';
+
+		if (!count($report->write_permissions)) {
+			echo $this->color('green', 'OK');
+			echo ' (no source code file is writeable)';
+		}
+		else {
+			echo $this->color('red', sprintf('%d files from the source code can be written', count($report->write_permissions)));
+
+			if ($verbose) {
+				echo '  ' . implode("\n  ", $report->write_permissions);
+			}
+			else {
+				echo "\n -> Consider using chmod to make all source code files read-only";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n";
+
+		echo 'Suspicious files found in local file storage: ';
+
+		if (!count($report->files_suspicious)) {
+			echo $this->color('green', '0');
+		}
+		else {
+			echo $this->color('red', sprintf('%d files have suspicious PHP code in local file storage', count($report->files_suspicious)));
+
+			if ($verbose) {
+				echo '  ' . implode("\n  ", $report->files_suspicious);
+			}
+			else {
+				echo "\n -> This should not be dangerous if there is no security flaw in Paheko, but this";
+				echo "\n    might indicate an attempted attack. Further investigation is recommended.";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n";
+
+		echo 'Suspicious files found in cache: ';
+
+		if (!count($report->cache_suspicious)) {
+			echo $this->color('green', '0');
+		}
+		else {
+			echo $this->color('red', sprintf('%d cache files have suspicious PHP code', count($report->cache_suspicious)));
+
+			if ($verbose) {
+				foreach ($report->cache_suspicious as $path => $code) {
+					echo "\n  - " . $path . ": " . $code;
+				}
+			}
+			else {
+				echo "\n -> This is highly suspicious and suggests an unknown security flaw has been used!";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n";
+
+		echo 'Private files exposed to public: ';
+
+		if (!count($report->private_exposed)) {
+			echo $this->color('green', '0');
+		}
+		else {
+			echo $this->color('red', sprintf('%d private files are publicly accessible!', count($report->private_exposed)));
+
+			if ($verbose) {
+				foreach ($report->private_exposed as $path => $code) {
+					echo "\n  - " . $path . ": HTTP code " . $code;
+				}
+			}
+			else {
+				echo "\n -> This probably means your webserver is misconfigured!";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n";
+
+		echo 'Manifest verification: ';
+		echo "\n - ";
+
+		if (!count($report->manifest->extra)) {
+			echo "no extra new file has been found in the source directory\n";
+		}
+		else {
+			echo $this->color('red', sprintf('%d extra files have been found in the source code directory!', count($report->manifest->extra)));
+
+			if ($verbose) {
+				foreach ($report->manifest->extra as $path) {
+					echo "\n   " . $path;
+				}
+			}
+			else {
+				echo "\n -> This might mean someone has modified the source code directory!";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n - ";
+
+		if (!count($report->manifest->mismatch)) {
+			echo "no file has been modified\n";
+		}
+		else {
+			echo $this->color('red', sprintf('%d files have been modified compared to the manifest!', count($report->manifest->mismatch)));
+
+			if ($verbose) {
+				foreach ($report->manifest->mismatch as $path) {
+					echo "\n   " . $path;
+				}
+			}
+			else {
+				echo "\n -> This might mean someone has modified the source code directory!";
+				echo "\n    Use --verbose option to see the list of files.";
+			}
+		}
+
+		echo "\n";
+
+		$this->success();
+	}
+
+	/**
 	 * Usage: paheko db COMMAND
 	 *
-	 * paheko db backup FILE
+	 * paheko db backup [--with-files] [--quota=SIZE] FILE
 	 *   Create a backup of the database to the provided file path.
+	 *
+	 *   Options:
+	 *   --with-files
+	 *     If specified, files contents will be integrated in the database backup,
+	 *     even if they were stored outside of the database.
+	 *
+	 *   --quota=SIZE
+	 *     Specifies the maximum size of all files stored in the database backup.
+	 *     Use this to only copy a subset of the files to the backup.
+	 *     The size can be specified exactly as in PHP ini files, as an integer
+	 *     that can be followed by K, M, or G.
 	 *
 	 * paheko db check
 	 *   Check database integrity and foreign keys.
@@ -555,8 +726,25 @@ class CLI
 			$db->commit();
 		}
 		elseif ($command === 'backup') {
-			@list($file) = $this->parseOptions($args, [], 1);
+			$o = $this->parseOptions($args, ['--with-files', '--quota='], 1);
+
+			$file = $o[0] ?? null;
+			$quota = $o['quota'] ?? null;
+			$with_files = array_key_exists('with-files', $o);
+
+			if (empty($file)) {
+				$this->fail('Missing target file');
+			}
+
+			if (!empty($quota)) {
+				$quota = Utils::return_bytes($quota);
+			}
+
 			Backup::make($file);
+
+			if ($with_files && FILE_STORAGE_BACKEND !== 'SQLite') {
+				Storage::export($file, $quota);
+			}
 		}
 		else {
 			$this->help(['db']);
@@ -566,10 +754,14 @@ class CLI
 	}
 
 	/**
-	 * Usage: paheko sql STATEMENT
+	 * Usage: paheko sql [STATEMENT]
 	 *   Run SQL statement and display result.
 	 *   Only read-only queries are supported (SELECT).
-	 *   INSERT, CREATE, ALTER, and other queries that would change the database are not supported.
+	 *   INSERT, CREATE, ALTER, and other queries that would change
+	 *   the database are not supported.
+	 *
+	 *   If STATEMENT is omitted, then the 'sqlite3' program will be executed
+	 *   using the Paheko database file, in interactive mode.
 	 */
 	public function sql(array $args)
 	{
@@ -587,7 +779,24 @@ class CLI
 		$sql = implode(' ', $args);
 
 		if (trim($sql) === '') {
-			$this->fail('No statement was provided.');
+			if (!shell_exec('which sqlite3')) {
+				$this->fail('No statement was provided and the "sqlite3" command is not installed.');
+			}
+
+			$args = [
+				'-header',
+				'-markdown',
+				'-nullvalue "*NULL*"'
+			];
+
+			if (!$rw) {
+				$args[] = '-readonly';
+			}
+
+			$args[] = escapeshellarg(DB_FILE);
+			$args = implode(' ', $args);
+			passthru('sqlite3 ' . $args);
+			return;
 		}
 
 		$db = DB::getInstance();
@@ -674,7 +883,10 @@ class CLI
 		if ($browser) {
 			$url = sprintf('http://%s:%d/admin/', $address, $port);
 
-			if (($_SERVER['DISPLAY'] ?? '') !== '') {
+			if (shell_exec('which xdg-open')) {
+				$browser = 'xdg-open %s';
+			}
+			elseif (shell_exec('which sensible-browser')) {
 				$browser = 'sensible-browser %s &';
 			}
 			else {

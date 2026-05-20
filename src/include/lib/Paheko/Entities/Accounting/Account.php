@@ -2,8 +2,6 @@
 
 namespace Paheko\Entities\Accounting;
 
-use DateTime;
-use KD2\DB\Date;
 use Paheko\Config;
 use Paheko\CSV_Custom;
 use Paheko\DB;
@@ -14,6 +12,12 @@ use Paheko\UserException;
 use Paheko\ValidationException;
 use Paheko\Accounting\Accounts;
 use Paheko\Accounting\Charts;
+
+use KD2\DB\Date;
+use KD2\DB\EntityManager as EM;
+
+use DateTime;
+use stdClass;
 
 class Account extends Entity
 {
@@ -152,13 +156,20 @@ class Account extends Entity
 
 	/**
 	 * Codes that should be enforced according to type (and vice-versa)
+	 * Note: order is important! eg. for BE, putting TYPE_EXPENSE before TYPE_POSITIVE_RESULT
+	 * would make the account an expense instead of a result account.
+	 *
+	 * Warning: common account types (see above) matching will only work if account code
+	 * has at least one more character than the code passed here.
+	 *
+	 * Eg: self::TYPE_INTERNAL => '58' will match '580' but not '58'!
 	 */
 	const LOCAL_TYPES = [
 		'FR' => [
 			self::TYPE_BANK => '512',
 			self::TYPE_CASH => '53',
 			self::TYPE_OUTSTANDING => '511',
-			self::TYPE_INTERNAL => '580',
+			self::TYPE_INTERNAL => '58',
 			self::TYPE_THIRD_PARTY => '4',
 			self::TYPE_EXPENSE => '6',
 			self::TYPE_REVENUE => '7',
@@ -179,13 +190,13 @@ class Account extends Entity
 			self::TYPE_BANK => '56',
 			self::TYPE_CASH => '570',
 			self::TYPE_OUTSTANDING => '499',
-			self::TYPE_EXPENSE => '6',
-			self::TYPE_REVENUE => '7',
 			self::TYPE_POSITIVE_RESULT => '692',
 			self::TYPE_NEGATIVE_RESULT => '690',
-			self::TYPE_THIRD_PARTY => '4',
 			self::TYPE_OPENING => '890',
 			self::TYPE_CLOSING => '891',
+			self::TYPE_THIRD_PARTY => '4',
+			self::TYPE_EXPENSE => '6',
+			self::TYPE_REVENUE => '7',
 		],
 		'CH' => [
 			self::TYPE_BANK => '102',
@@ -255,11 +266,15 @@ class Account extends Entity
 			'label' => 'Réf. ligne',
 			'select' => 'l.reference',
 		],
+		'letter' => [
+			'label' => 'Lettrage',
+			'select' => 'll.letter',
+		],
 		'id_project' => [
 			'select' => 'l.id_project',
 		],
 		'project_code' => [
-			'select' => 'IFNULL(p.code, SUBSTR(p.label, 1, 10) || \'…\')',
+			'select' => 'COALESCE(p.code, p.label)',
 			'label' => 'Projet',
 		],
 		'locked' => [
@@ -402,20 +417,29 @@ class Account extends Entity
 			$country = $this->getCountry();
 		}
 
-		$pattern = self::LOCAL_TYPES[$country][$type] ?? null;
+		$code = self::LOCAL_TYPES[$country][$type] ?? null;
 
-		if (!$pattern) {
+		if ($code === null) {
 			return false;
 		}
 
+		// Common types will not match the parent account, only the children
+		// eg. self::TYPE_INTERNAL => '58' will not match '58', but only '580' and so on
 		if (in_array($type, self::COMMON_TYPES)) {
-			$pattern = sprintf('/^%s.+/', $pattern);
+			return 0 === strpos($this->code, $code) && strlen($this->code) > strlen($code);
 		}
 		else {
-			$pattern = sprintf('/^%s$/', $pattern);
-		}
+			if ($this->code === $code) {
+				return true;
+			}
+			// Allow for matching 890000 === 890
+			elseif (substr($this->code, 0, strlen($code)) === $code
+				&& trim(substr($this->code, strlen($code)), '0') === '') {
+				return true;
+			}
 
-		return (bool) preg_match($pattern, $this->code);
+			return false;
+		}
 	}
 
 	public function setLocalRules(?string $country = null): void
@@ -448,7 +472,7 @@ class Account extends Entity
 	{
 		$country = $this->getCountry();
 
-		if ($country === 'FR') {
+		if ($country === 'FR' && !$this->exists()) {
 			$classe = substr($this->code, 0, 1);
 			$this->assert($classe >= 1 && $classe <= 8, 'Seuls les comptes de classe 1 à 8 sont autorisés dans le plan comptable français');
 		}
@@ -518,7 +542,7 @@ class Account extends Entity
 		return self::LOCAL_TYPES[$country][$this->type];
 	}
 
-	public function listJournal(int $year_id, bool $simple = false, ?DateTime $start = null, ?DateTime $end = null)
+	public function listJournal(int $year_id, bool $simple = false, ?stdClass $filter = null)
 	{
 		$db = DB::getInstance();
 		$columns = self::LIST_COLUMNS;
@@ -541,15 +565,36 @@ class Account extends Entity
 			LEFT JOIN acc_projects p ON p.id = l.id_project';
 		$conditions = sprintf('l.id_account = %d AND t.id_year = %d', $this->id(), $year_id);
 
-		$sum = null;
-		$reverse = $this->isReversed($simple, $year_id) ? -1 : 1;
-
-		if ($start) {
-			$conditions .= sprintf(' AND t.date >= %s', $db->quote($start->format('Y-m-d')));
+		if ($this->canLetter()) {
+			$tables .= ' LEFT JOIN acc_letters ll ON ll.id = l.id_letter';
+		}
+		else {
+			unset($columns['letter']);
 		}
 
-		if ($end) {
-			$conditions .= sprintf(' AND t.date <= %s', $db->quote($end->format('Y-m-d')));
+		$reverse = $this->isReversed($simple) ? -1 : 1;
+		$start = $end = null;
+
+		if (!empty($filter->start)
+			&& $filter->start instanceof DateTime) {
+			$conditions .= sprintf(' AND t.date >= %s', $db->quote($filter->start->format('Y-m-d')));
+			$start = $filter->start;
+		}
+
+		if (!empty($filter->end)
+			&& $filter->end instanceof DateTime) {
+			$conditions .= sprintf(' AND t.date <= %s', $db->quote($filter->end->format('Y-m-d')));
+			$end = $filter->end;
+		}
+
+		if (!empty($filter->letter)
+			&& $this->canLetter()) {
+			if ($filter->letter === 'only') {
+				$conditions .= ' AND ll.id IS NOT NULL';
+			}
+			elseif ($filter->letter === 'none') {
+				$conditions .= ' AND ll.id IS NULL';
+			}
 		}
 
 		$columns['change']['select'] = sprintf($columns['change']['select'], $reverse);
@@ -564,8 +609,9 @@ class Account extends Entity
 
 		$list = new DynamicList($columns, $tables, $conditions);
 		$list->orderBy('date', true);
-		$list->setCount('COUNT(*)');
 		$list->setPageSize(null); // Because with paging we can't calculate the running sum
+
+		$sum = null;
 		$list->setModifier(function (&$row) use (&$sum, &$list, $reverse, $year_id, $start, $end) {
 			if (property_exists($row, 'sum')) {
 				$desc = $list->getOrderIsDesc();
@@ -607,21 +653,14 @@ class Account extends Entity
 	 * Renvoie TRUE si le solde du compte est inversé en vue simplifiée (= crédit - débit, au lieu de débit - crédit)
 	 * @return boolean
 	 */
-	public function isReversed(bool $simple, int $id_year): bool
+	public function isReversed(bool $simple): bool
 	{
-		$is_reversed = Accounts::isReversed($simple, $this->type);
+		return Accounts::isReversed($simple, $this->type);
+	}
 
-		if (!$is_reversed) {
-			return $is_reversed;
-		}
-
-		$position = $this->getPosition($id_year);
-
-		if ($position == self::ASSET || $position == self::EXPENSE) {
-			return false;
-		}
-
-		return true;
+	public function canLetter(): bool
+	{
+		return $this->type === self::TYPE_THIRD_PARTY;
 	}
 
 	public function getPosition(int $id_year): int
@@ -700,7 +739,7 @@ class Account extends Entity
 		}
 	}
 
-	public function getDepositJournal(int $year_id, array $checked = []): DynamicList
+	public function getDepositJournal(int $id_year, bool $only_this_year, array $checked = []): DynamicList
 	{
 		$columns = [
 			'id' => [
@@ -711,6 +750,10 @@ class Account extends Entity
 				'select' => 't.date',
 				'label' => 'Date',
 				'order' => 't.date %s, t.id %1$s',
+			],
+			'year_label' => [
+				'select' => 'y.label',
+				'label' => 'Exercice',
 			],
 			'reference' => [
 				'select' => 't.reference',
@@ -750,55 +793,99 @@ class Account extends Entity
 			],
 		];
 
-		$tables = 'acc_transactions_lines l INNER JOIN acc_transactions t ON t.id = l.id_transaction';
-		$conditions = sprintf('t.id_year = %d AND l.id_account = %d AND l.credit = 0 AND NOT (t.status & %d) AND NOT (t.status & %d)',
-			$year_id,
-			$this->id(),
-			Transaction::STATUS_DEPOSITED,
+		$tables = 'acc_transactions_lines l
+			INNER JOIN acc_transactions t ON t.id = l.id_transaction
+			INNER JOIN acc_accounts a ON a.id = l.id_account';
+		$conditions = sprintf('a.code = :code AND l.credit = 0 AND NOT (l.status & %d) AND NOT (t.status & %d)',
+			Line::STATUS_DEPOSITED,
 			Transaction::STATUS_OPENING_BALANCE
 		);
 
+		if ($only_this_year) {
+			$conditions .= ' AND t.id_year = ' . (int)$id_year;
+			unset($columns['year_label']);
+		}
+		else {
+			$tables .= ' INNER JOIN acc_years y ON y.id = t.id_year';
+		}
+
 		$list = new DynamicList($columns, $tables, $conditions);
+		$list->setParameter('code', $this->code);
 		$list->setPageSize(null);
 		$list->orderBy('date', true);
 		$list->setModifier(function (&$row) use (&$sum, $checked) {
 			$sum += ($row->credit - $row->debit);
 			$row->running_sum = $sum;
-			$row->checked = array_key_exists($row->id, $checked);
+			$row->checked = in_array($row->id_line, $checked);
 		});
 
 		return $list;
 	}
 
-	public function getDepositMissingBalance(int $year_id): int
+	public function hasMissingDepositsFromOtherYears(int $id_year): bool
 	{
-		$deposit_balance = DB::getInstance()->firstColumn('SELECT SUM(l.debit)
+		$db = DB::getInstance();
+		return (bool) $db->firstColumn('SELECT 1 FROM acc_transactions_lines l
+			INNER JOIN acc_transactions t ON t.id = l.id_transaction
+			INNER JOIN acc_accounts a ON a.id = l.id_account
+			WHERE t.id_year != ?
+				AND a.code = ?
+				AND l.credit = 0
+				AND NOT (l.status & ?)
+				AND NOT (t.status & ?)
+			LIMIT 1;',
+			$id_year,
+			$this->code,
+			Line::STATUS_DEPOSITED,
+			Transaction::STATUS_OPENING_BALANCE
+		);
+	}
+
+	public function getDepositMissingBalance(int $id_year, bool $only_this_year): int
+	{
+		$sql = 'SELECT SUM(l.debit)
 			FROM acc_transactions_lines l
 			INNER JOIN acc_transactions t ON t.id = l.id_transaction
-			WHERE t.id_year = ? AND l.id_account = ? AND l.credit = 0
+			INNER JOIN acc_accounts a ON a.id = l.id_account
+			WHERE %s a.code = ? AND l.credit = 0
+				AND NOT (l.status & ?)
 				AND NOT (t.status & ?)
-				AND NOT (t.status & ?)
-			ORDER BY t.date, t.id;',
-			$year_id,
-			$this->id(),
-			Transaction::STATUS_DEPOSITED,
+			ORDER BY t.date, t.id;';
+
+		$sql = sprintf($sql, $only_this_year ? sprintf('t.id_year = %s AND ', $id_year) : '');
+
+		$deposit_balance = DB::getInstance()->firstColumn($sql,
+			$this->code,
+			Line::STATUS_DEPOSITED,
 			Transaction::STATUS_OPENING_BALANCE
 		);
 
-		$account_balance = $this->getSum($year_id)->balance;
+		$account_balance = $this->getBalance($id_year)->balance ?? 0;
 
 		return $account_balance - $deposit_balance;
 	}
 
-	public function getSum(int $year_id): ?\stdClass
+	public function markLinesAsDeposited(array $ids)
 	{
-		$sum = DB::getInstance()->first('SELECT balance, credit, debit
+		if ($this->type !== self::TYPE_OUTSTANDING) {
+			throw new \LogicException('This account cannot deposit transactions.');
+		}
+
+		$ids = implode(',', array_map('intval', $ids));
+		$sql = sprintf('UPDATE acc_transactions_lines SET status = (status | %d) WHERE id IN (%s);', Line::STATUS_DEPOSITED, $ids);
+		DB::getInstance()->exec($sql);
+	}
+
+	public function getBalance(int $year_id): ?\stdClass
+	{
+		// balance_real is for journal in expert mode, as balance is automatically made positive when
+		// an account moves from asset to liability or vice-versa
+		$sum = DB::getInstance()->first('SELECT balance, credit, debit, credit - debit AS balance_real
 			FROM acc_accounts_balances
 			WHERE id = ? AND id_year = ?;', $this->id(), $year_id);
 
 		return $sum ?: null;
 	}
-
 
 	public function getSumAtDate(int $year_id, DateTime $date, bool $reconciled_only = false): int
 	{
@@ -1005,4 +1092,86 @@ class Account extends Entity
 		return $t;
 	}
 
+	public function matchImportTransactions(Year $year, CSV_Custom $csv, ?array $source = null): array
+	{
+		$out = [];
+
+		foreach ($csv->iterate() as $i => $row) {
+			$row->date = Utils::parseDateTime($row->date, Date::class);
+
+			if (!$row->date) {
+				continue;
+			}
+
+			if (isset($row->credit, $row->debit)) {
+				$row->amount = $row->credit ? $row->credit : '-' . trim($row->debit, '-');
+			}
+			elseif (!isset($row->amount)) {
+				throw new \LogicException('No amount column found in: ' . json_encode($row));
+			}
+
+			try {
+				$row->amount = Utils::moneyToInteger($row->amount, true);
+			}
+			catch (\InvalidArgumentException $e) {
+				throw new UserException(sprintf('Ligne %d : %s', $i, $e->getMessage()), 0, $e);
+			}
+
+			$transaction = EM::findOne(Transaction::class,
+				'SELECT t.* FROM @TABLE t
+				INNER JOIN acc_transactions_lines l ON l.id_transaction = t.id
+				WHERE l.id_account = ? AND t.date = ? AND t.id_year = ?
+				GROUP BY t.id
+				HAVING SUM(l.debit - l.credit) = ?
+				LIMIT 1;',
+				$this->id(),
+				$row->date,
+				$year->id(),
+				$row->amount,
+			);
+
+			if (null === $transaction) {
+				$transaction = new Transaction;
+				$transaction->id_year = $year->id();
+				$transaction->importForm((array) $row);
+
+				$line = new Line;
+				$line->id_account = $this->id();
+				$line2 = null;
+
+				// Inverted, as this is a bank account
+				$line->credit = $row->amount < 0 ? abs($row->amount) : 0;
+				$line->debit = $row->amount > 0 ? abs($row->amount) : 0;
+
+				if (!empty($source[$i])) {
+					$transaction->importForm($source[$i]);
+					$line->importForm([
+						'reconciled' => !empty($source[$i]['reconcile']),
+						'reference'  => $source[$i]['payment_ref'] ?? null,
+					]);
+
+					$line2 = new Line;
+					$line2->credit = $line->debit;
+					$line2->debit = $line->credit;
+					$line2->id_account = isset($source[$i]['account']) ? (int)key($source[$i]['account']) : null;
+				}
+				else {
+					$line->reference = $row->p_reference ?? null;
+					$line->reconciled = true;
+				}
+
+				$transaction->addLine($line);
+
+				if ($line2) {
+					$transaction->addLine($line2);
+				}
+
+				$transaction->type = $transaction->findTypeFromAccounts();
+			}
+
+			$out[$i] = $transaction;
+		}
+
+		return $out;
+	}
 }

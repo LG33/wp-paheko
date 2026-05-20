@@ -13,6 +13,7 @@ use Paheko\DB;
 use Paheko\Entity;
 use Paheko\Files\Conversion;
 use Paheko\Form;
+use Paheko\Log;
 use Paheko\Plugins;
 use Paheko\Static_Cache;
 use Paheko\Template;
@@ -22,7 +23,6 @@ use Paheko\Users\Session;
 use Paheko\Utils;
 use Paheko\Entities\Web\Page;
 use Paheko\Web\Render\Render;
-use Paheko\Web\Router;
 use Paheko\Web\Cache as Web_Cache;
 use Paheko\Users\DynamicFields;
 use Paheko\UserTemplate\CommonFunctions;
@@ -46,7 +46,7 @@ class File extends Entity
 	/**
 	 * Unique file identifier as a random string
 	 */
-	protected string $hash_id;
+	protected ?string $hash_id;
 
 	/**
 	 * Parent directory of file
@@ -87,6 +87,7 @@ class File extends Entity
 		'500px' => [['resize', 500]],
 		'750px' => [['resize', 750]],
 		'crop-256px' => [['trim'], ['cropResize', 256, 256]],
+		'email-150px' => [['trim'], ['resize', 150]],
 	];
 
 	const THUMB_CACHE_ID = 'file.thumb.%s.%s';
@@ -388,11 +389,14 @@ class File extends Entity
 
 		// Move versions as well
 		if ($v = Files::get(self::CONTEXT_VERSIONS . '/' . $this->path)) {
-			$v->rename(self::CONTEXT_TRASH . '/' . $hash . '/' . $v->path, false);
+			$v->rename(self::CONTEXT_TRASH . '/' . $hash . '/' . $v->path);
 		}
 
 		// ->rename() will ->save()
-		$this->rename(self::CONTEXT_TRASH . '/' . $hash . '/' . $this->path, false);
+		$this->rename(self::CONTEXT_TRASH . '/' . $hash . '/' . $this->path);
+
+		// Just to make sure ;)
+		$this->save();
 
 		Plugins::fire('file.trash', false, ['file' => $this]);
 
@@ -417,11 +421,11 @@ class File extends Entity
 
 		// Restore versions
 		if ($v) {
-			$v->rename(self::CONTEXT_VERSIONS . '/' . $orig_path, false);
+			$v->rename(self::CONTEXT_VERSIONS . '/' . $orig_path);
 		}
 
 		// rename() will do the save()
-		$this->rename($orig_path, false);
+		$this->rename($orig_path);
 
 		Plugins::fire('file.restore', false, ['file' => $this]);
 
@@ -483,6 +487,10 @@ class File extends Entity
 		$this->deleteCache();
 		$this->deleteVersions();
 
+		if (!$this->isDir()) {
+			Log::add(Log::DELETE, ['entity' => self::class, 'path' => $this->path]);
+		}
+
 		$r = parent::delete();
 
 		$db->commit();
@@ -496,7 +504,7 @@ class File extends Entity
 	 * @param  string $target Target path
 	 * @return self
 	 */
-	public function copy(string $new_path): self
+	public function copy(string $new_path, ?Session $session = null): self
 	{
 		if ($this->isDir()) {
 			throw new \LogicException('Cannot copy a directory');
@@ -505,25 +513,23 @@ class File extends Entity
 		$path = $this->getLocalFilePath();
 		$pointer = $path ? null : $this->getReadOnlyPointer();
 
-		return Files::createFrom($new_path, compact('path', 'pointer'));
+		return Files::createFrom($new_path, compact('path', 'pointer'), $session);
 	}
 
 	/**
 	 * Change ONLY the file name, not the parent path
-	 * @param  string $new_name New file name
-	 * @return bool
 	 */
-	public function changeFileName(string $new_name, bool $check_session = true, bool $check_exists = false): bool
+	public function changeFileName(string $new_name, ?Session $session = null, bool $check_exists = false): bool
 	{
 		self::validateFileName($new_name);
 
 		$v = $this->getVersionsDirectory();
 
-		$r = $this->rename(ltrim($this->parent . '/' . $new_name, '/'), $check_session, $check_exists);
+		$r = $this->rename(ltrim($this->parent . '/' . $new_name, '/'), $session, $check_exists);
 
 		// Rename versions directory as well
 		if ($v && $r) {
-			$v->changeFileName($new_name);
+			$v->changeFileName($new_name, $session);
 		}
 
 		return $r;
@@ -534,11 +540,11 @@ class File extends Entity
 	 * @param  string $target New directory path
 	 * @return bool
 	 */
-	public function move(string $target, bool $check_session = true): bool
+	public function move(string $target): bool
 	{
 		$v = $this->getVersionsDirectory();
 
-		$r = $this->rename($target . '/' . $this->name, $check_session);
+		$r = $this->rename($target . '/' . $this->name);
 
 		if ($r && $v) {
 			$v->rename(self::CONTEXT_VERSIONS . '/' . $this->path);
@@ -552,15 +558,15 @@ class File extends Entity
 	 * @param  string $new_path Target path
 	 * @return bool
 	 */
-	public function rename(string $new_path, bool $check_session = true, bool $check_exists = false): bool
+	public function rename(string $new_path, ?Session $session = null, bool $check_exists = false): bool
 	{
 		$name = Utils::basename($new_path);
 
 		self::validatePath($new_path);
 		self::validateFileName($name);
 
-		if ($check_session) {
-			self::validateCanHTML($name, $new_path);
+		if ($session !== null) {
+			self::validateCanHTML($name, $new_path, $session);
 		}
 
 		if ($new_path == $this->path) {
@@ -608,7 +614,7 @@ class File extends Entity
 		if ($is_dir) {
 			foreach ($list as $file) {
 				$file->set('trash', $this->trash);
-				$file->move($new_path . trim(substr($file->parent, strlen($old->path)), '/'), $check_session);
+				$file->move($new_path . trim(substr($file->parent, strlen($old->path)), '/'), $session);
 			}
 		}
 
@@ -892,7 +898,7 @@ class File extends Entity
 			return 'image';
 		}
 		elseif ($this->isDir()) {
-			return 'directory';
+			return 'folder';
 		}
 
 		return Files::getIconShape($this->name);
@@ -1083,6 +1089,31 @@ class File extends Entity
 		$tpl->assign(compact('csrf_key', 'content', 'path', 'format'));
 		$tpl->display(sprintf('common/files/edit_%s.tpl', $editor));
 		return false;
+	}
+
+	public function getHighlightLanguage(): ?string
+	{
+		switch ($this->extension()) {
+			case 'css':
+				return 'css';
+			case 'js':
+				return 'javascript';
+			case 'json':
+				return 'json';
+			case 'md':
+				return 'markdown';
+			case 'xml':
+				return 'xml';
+			case 'sql':
+				return 'sql';
+			case 'html':
+			case 'htm':
+			case 'tpl':
+			case '':
+				return 'brindille';
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -1371,13 +1402,19 @@ class File extends Entity
 	 */
 	static public function validateCanHTML(string $name, string $path, ?Session $session = null): void
 	{
+		// If no session was given, the file creation / rename comes from a plugin
+		// probably, so it's always allowed to create HTML
+		if (null === $session) {
+			return;
+		}
+
 		if (!preg_match('/\.(?:htm|js|xhtm)/', $name)) {
 			return;
 		}
 
-		$session ??= Session::getInstance();
-
-		if (0 === strpos($path, self::CONTEXT_MODULES . '/web') && $session->canAccess($session::SECTION_WEB, $session::ACCESS_ADMIN)) {
+		// Web module allows web admin to create HTML files
+		if (0 === strpos($path, self::CONTEXT_MODULES . '/web')
+			&& $session->canAccess($session::SECTION_WEB, $session::ACCESS_ADMIN)) {
 			return;
 		}
 

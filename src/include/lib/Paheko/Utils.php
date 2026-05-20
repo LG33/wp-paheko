@@ -2,14 +2,17 @@
 
 namespace Paheko;
 
-use KD2\Security;
+use KD2\ErrorManager;
 use KD2\Form;
 use KD2\HTTP;
-use KD2\Translate;
+use KD2\Security;
 use KD2\SMTP;
+use KD2\Translate;
+use KD2\DB\Date;
 use KD2\DB\DB_Exception;
 
 use Paheko\Users\Session;
+use Paheko\ValidationException;
 
 class Utils
 {
@@ -84,6 +87,10 @@ class Utils
 		'videocam'        => '📹',
 		'microphone'      => '🎤',
 		'barcode'         => '│',
+		'reply'           => '↢',
+		'reply-all'       => '⬹',
+		'forward'         => '↣',
+		'filter'          => '⧩',
 	];
 
 	const FRENCH_DATE_NAMES = [
@@ -126,43 +133,163 @@ class Utils
 		'Sun' => 'dim',
 	];
 
-	static public function get_datetime($ts)
+	static public function parseDateTime($value, string $class = \DateTime::class, bool $throw_on_invalid_date = false): ?\DateTime
 	{
-		if (null === $ts) {
+		if (null === $value) {
+			return null;
+		}
+		elseif ('' === $value) {
+			return null;
+		}
+		elseif (is_object($value)) {
+			if ($value instanceof $class) {
+				return $value;
+			}
+			elseif ($class === Date::class && $value instanceof \DateTimeInterface) {
+				return Date::createFromInterface($value);
+			}
+			elseif ($class === \DateTime::class && $value instanceof \DateTime) {
+				return $value;
+			}
+			elseif ($class === \DateTime::class && $value instanceof \DateTimeImmutable) {
+				return \DateTime::createFromImmutable($value);
+			}
+			elseif ($class === Date::class && $value instanceof \DateTimeImmutable) {
+				return Date::createFromImmutable($value);
+			}
+			else {
+				throw new \InvalidArgumentException('Invalid argument, not a valid date object: ' . get_class($value));
+			}
+		}
+		elseif (is_array($value)) {
+			throw new \InvalidArgumentException('Invalid argument, not a valid date');
+		}
+
+		$value = trim((string) $value);
+
+		if (!$value) {
 			return null;
 		}
 
-		if (is_object($ts) && $ts instanceof \DateTimeInterface) {
-			return $ts;
+		$format = null;
+		$date = null;
+
+		$a = substr($value, 2, 1);
+		$b = substr($value, 4, 1);
+		$c = substr($value, 1, 1);
+		$l = strlen($value);
+
+		if ($c === '/' && ($l === 8 || $l === 9)) {
+			// D/MM/YYY, D/M/YYYY
+			$format = '!d/m/Y';
 		}
-		elseif (is_numeric($ts)) {
-			$ts = new \DateTime('@' . $ts);
-			$ts->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-			return $ts;
+		elseif ($a === '/') {
+			// DD/MM/YY
+			if ($l === 8) {
+				$year = substr($value, -2);
+
+				// Make sure recent years are in the 21st century
+				if ($year < date('y') + 10) {
+					$year = sprintf('20%02d', $year);
+				}
+				// while old dates remain in the old one
+				else {
+					$year = sprintf('19%02d', $year);
+				}
+
+				$format = '!d/m/Y';
+				$value = substr($value, 0, -2) . $year;
+			}
+			// DD/MM/YYYY, DD/M/YYYY
+			elseif ($l === 10 || $l === 9) {
+				$format = '!d/m/Y';
+			}
+			// DD/MM/YYYY HH:MM
+			elseif ($l === 16) {
+				$format = '!d/m/Y H:i';
+			}
+			// DD/MM/YYYY HH:MM:SS
+			elseif ($l === 19) {
+				$format = '!d/m/Y H:i:s';
+			}
 		}
-		elseif (preg_match('!^\d{2}/\d{2}/\d{4}$!', $ts)) {
-			return \DateTime::createFromFormat('!d/m/Y', $ts);
+		elseif ($b === '/') {
+			// YYYY/MM/DD
+			if ($l === 10) {
+				$format = '!Y/m/d';
+			}
+			// YYYY/MM/DD HH:MM
+			elseif ($l === 16) {
+				$format = '!Y/m/d H:i';
+			}
+			// YYYY/MM/DD HH:MM:SS
+			elseif ($l === 19) {
+				$format = '!Y/m/d H:i:s';
+			}
 		}
-		elseif (preg_match('!^\d{2}/\d{2}/\d{2}$!', $ts)) {
-			return \DateTime::createFromFormat('!d/m/y', $ts);
+		elseif ($b === '-') {
+			// YYYY-MM-DD HH:MM:SS
+			if ($l === 19) {
+				$format = '!Y-m-d H:i:s';
+			}
+			// YYYY-MM-DDTHH:MM
+			elseif ($l === 16 && substr($value, 10, 1) === 'T') {
+				$format = '!Y-m-d\TH:i';
+			}
+			// YYYY-MM-DD HH:MM
+			elseif ($l === 16) {
+				$format = '!Y-m-d H:i';
+			}
+			// YYYY-MM-DD
+			elseif ($l === 10) {
+				$format = '!Y-m-d';
+			}
 		}
-		elseif (strlen($ts) == 10) {
-			return \DateTime::createFromFormat('!Y-m-d', $ts);
+		elseif (ctype_digit($value)) {
+			// YYYYMMDD
+			if ($l === 8 && preg_match('!^20\d{2}[01]\d[0123]\d$!', $value)) {
+				$format = '!Ymd';
+			}
+			else {
+				$format = 'U';
+			}
 		}
-		elseif (strlen($ts) == 19) {
-			return \DateTime::createFromFormat('Y-m-d H:i:s', $ts);
+
+		if (null !== $format) {
+			if ($class === Date::class) {
+				$date = Date::createFromFormat($format, $value);
+			}
+			else {
+				$date = \DateTime::createFromFormat($format, $value);
+			}
+
+			// Make sure UNIX timestamps are returned with local timezone
+			if ($format === 'U') {
+				$date->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+			}
 		}
-		elseif (strlen($ts) == 16) {
-			return \DateTime::createFromFormat('!Y-m-d H:i', $ts);
+
+		if ($throw_on_invalid_date) {
+			if (!$date) {
+				$e = new ValidationException('Format de date invalide (merci d\'utiliser le format JJ/MM/AAAA) : ' . $value);
+				throw $e;
+			}
+
+			$y = $date->format('Y');
+			if ($y < 1900 || $y > 2100) {
+				throw new ValidationException(sprintf('Date invalide (%s) : doit être entre 1900 et 2100', $value));
+			}
 		}
-		else {
-			return null;
+		elseif ($date === false) {
+			$date = null;
 		}
+
+		return $date;
 	}
 
 	static public function strftime_fr($ts, $format): string
 	{
-		$ts = self::get_datetime($ts);
+		$ts = self::parseDateTime($ts);
 
 		if (null === $ts) {
 			return '';
@@ -174,7 +301,7 @@ class Utils
 
 	static public function date_fr($ts, $format = null): string
 	{
-		$ts = self::get_datetime($ts);
+		$ts = self::parseDateTime($ts);
 
 		if (!$ts) {
 			return '';
@@ -232,7 +359,7 @@ class Utils
 		return true;
 	}
 
-	static public function moneyToInteger($value)
+	static public function moneyToInteger($value, bool $throw_on_invalid = true): ?int
 	{
 		if (null === $value || trim($value) === '') {
 			return 0;
@@ -241,17 +368,46 @@ class Utils
 		// Remove whitespace characters
 		$value = preg_replace('/\h/u', '', $value);
 
-		// Remove US thousands separator, if cents separator is a point
-		if (strpos($value, '.') === strlen($value) - 3) {
-			$value = str_replace(',', '', $value);
+		// Remove plus sign
+		if (substr($value, 0, 1) === '+') {
+			$value = substr($value, 1);
 		}
 
-		if (!preg_match('/^(-?)(\d+)(?:[,.](\d{1,3}))?/', $value, $match)) {
-			throw new UserException(sprintf('Le montant est invalide : %s. Exemple de format accepté : 142,02', $value));
+		// Replace international decimal notation: ,12 ; 123,45 ; 1.043,12
+		if (substr($value, 0, 1) === ','
+			|| strpos($value, ',') > strpos($value, '.')) {
+			$value = strtr($value, ['.' => '', ',' => '.']);
 		}
 
-		$cents = $match[3] ?? '0';
+		// Remove US thousands separator
+		$value = str_replace(',', '', $value);
 
+		if (substr($value, 0, 1) === '-') {
+			$sign = -1;
+			$value = substr($value, 1);
+		}
+		else {
+			$sign = 1;
+		}
+
+		$value = preg_replace('/[^\d.]/', '', $value);
+
+		$parts = explode('.', $value);
+
+		if (count($parts) > 2
+			|| !count($parts)
+			|| !(empty($parts[0]) || ctype_digit($parts[0]))
+			|| !(empty($parts[1]) || ctype_digit($parts[1]))) {
+			if ($throw_on_invalid) {
+				throw new \InvalidArgumentException(sprintf('Le montant est invalide : %s. Exemple de format accepté : 142,02', $value));
+			}
+
+			return null;
+		}
+
+		$cents = $parts[1] ?? '00';
+
+		// pad cents with zeros
 		if (strlen($cents) === 1) {
 			$cents .= '0';
 		}
@@ -259,12 +415,13 @@ class Utils
 		$more = (int) substr($cents, 2, 1);
 		$cents = (int) substr($cents, 0, 2);
 
+		// Round if cent of a cent, eg. 1,505 -> 1,51 / 1,504 -> 1,50
 		if ($more >= 5) {
 			$cents++;
 		}
 
-		$value = $match[1] . $match[2] . str_pad((string)$cents, 2, '0', STR_PAD_LEFT);
-		$value = (int) $value;
+		$value = $parts[0] . str_pad((string)$cents, 2, '0', STR_PAD_LEFT);
+		$value = $sign * (int) $value;
 		return $value;
 	}
 
@@ -281,7 +438,7 @@ class Utils
 		$w = explode('.', str_replace(',', '.', $number));
 		$a = $w[0] ?: '0';
 		$b = substr(($w[1] ?? '0') . '000', 0, 3);
-		return intval($a . $b);
+		return abs(intval($a . $b));
 	}
 
 	static public function format_weight($number, bool $empty_is_zero = false, bool $append_unit = false): string
@@ -308,7 +465,8 @@ class Utils
 		return $out;
 	}
 
-	static public function money_format($number, ?string $dec_point = ',', string $thousands_sep = ' ', $zero_if_empty = true): string {
+	static public function money_format($number, ?string $dec_point = ',', string $thousands_sep = ' ', $zero_if_empty = true): string
+	{
 		if ($number == 0) {
 			return $zero_if_empty ? '0' : '0,00';
 		}
@@ -336,29 +494,36 @@ class Utils
 
 	static public function getLocalURL(string $url = '', ?string $default_prefix = null): string
 	{
-		if (substr($url, 0, 1) == '!') {
+		if (substr($url, 0, 1) === '!') {
 			return ADMIN_URL . substr($url, 1);
 		}
-		elseif (substr($url, 0, 7) == '/admin/') {
+		elseif (substr($url, 0, 7) === '/admin/') {
 			return ADMIN_URL . substr($url, 7);
 		}
-		elseif (substr($url, 0, 2) == './') {
+		elseif (substr($url, 0, 2) === './') {
 			$base = self::getSelfURI();
+			$base = strtok($base, '?');
+			strtok('');
 			$base = preg_replace('!/[^/]*$!', '/', $base);
 			$base = trim($base, '/');
 			$base = $base ? $base . '/' : '';
 			return '/' . $base . substr($url, 2);
 		}
+		elseif (substr($url, 0, 3) === '../') {
+			$base = self::getSelfURI();
+			$base = preg_replace('![^/]+/[^/]*$!', '/', $base);
+			return rtrim($base, '/') . '/' . substr($url, 3);
+		}
 		elseif (substr($url, 0, 1) == '/' && strpos($url, WWW_URI) === 0) {
 			return WWW_URL . substr($url, strlen(WWW_URI));
 		}
-		elseif (substr($url, 0, 1) == '/') {
+		elseif (substr($url, 0, 1) === '/') {
 			return WWW_URL . substr($url, 1);
 		}
-		elseif (substr($url, 0, 5) == 'http:' || substr($url, 0, 6) == 'https:') {
+		elseif (substr($url, 0, 5) === 'http:' || substr($url, 0, 6) === 'https:') {
 			return $url;
 		}
-		elseif ($url == '') {
+		elseif ($url === '') {
 			return ADMIN_URL;
 		}
 		else {
@@ -368,6 +533,27 @@ class Utils
 
 			return $default_prefix . $url;
 		}
+	}
+
+	static public function isLocalURL(string $url): bool
+	{
+		if (substr($url, 0, 1) === '/'
+			&& substr($url, 1, 1) !== '/') {
+			return true;
+		}
+
+		$config = Config::getInstance();
+
+		$my_hosts = [
+			parse_url(WWW_URL, PHP_URL_HOST),
+			parse_url(ADMIN_URL, PHP_URL_HOST),
+			$config->org_web ? parse_url($config->org_web, PHP_URL_HOST) : null,
+		];
+
+		$my_hosts = array_filter($my_hosts);
+		$host = parse_url($url, PHP_URL_HOST);
+
+		return in_array($host, $my_hosts);
 	}
 
 	static public function getRequestURI(): ?string
@@ -393,6 +579,10 @@ class Utils
 	static public function getSelfURI($qs = true)
 	{
 		$uri = self::getRequestURI();
+
+		if ($uri === null) {
+			return '';
+		}
 
 		if ($qs !== true && (strpos($uri, '?') !== false))
 		{
@@ -451,7 +641,7 @@ class Utils
 			return null;
 		}
 
-		if ($dialog !== '' && !ctype_alnum($dialog)) {
+		if ($dialog !== '' && !ctype_alnum((string) $dialog)) {
 			return null;
 		}
 
@@ -521,6 +711,19 @@ class Utils
 		}
 	}
 
+	static public function closeFrameIfDialog(?string $destination = null, bool $exit = true): void
+	{
+		$url = self::getLocalURL($destination ?? '!');
+
+		$js = 'window.parent.g.closeDialog();';
+
+		echo self::getFrameRedirectHTML($js, $url);
+
+		if ($exit) {
+			exit;
+		}
+	}
+
 	static public function getFrameRedirectHTML(string $js, string $url): string
 	{
 		return '
@@ -560,7 +763,7 @@ class Utils
 			}
 		}
 
-		if (PHP_SAPI == 'cli') {
+		if (PHP_SAPI === 'cli') {
 			echo 'Please visit ' . $destination . PHP_EOL;
 			exit;
 		}
@@ -581,8 +784,9 @@ class Utils
 			  ' </body>'.
 			  '</html>';
 
-			if ($exit)
-			  exit();
+			if ($exit) {
+				exit;
+			}
 
 			return true;
 		}
@@ -713,9 +917,39 @@ class Utils
 		return $list;
 	}
 
+	static public function recursiveIterate(string $path): \Generator
+	{
+		$dir = dir($path);
+
+		while ($file = $dir->read()) {
+			if ($file === '.' || $file === '..') {
+				continue;
+			}
+
+			$file_path = $path . DIRECTORY_SEPARATOR . $file;
+			yield $file_path;
+
+			if (is_dir($file_path)) {
+				yield from self::recursiveIterate($file_path);
+			}
+		}
+
+		$dir->close();
+	}
+
 	static public function suggestPassword(): string
 	{
-		return Security::getRandomPassphrase(ROOT . '/include/data/locales/fr/dictionary.txt');
+		return Security::getRandomPassphrase(self::getDictionaryPath());
+	}
+
+	static public function getDictionaryPath(string $lang = 'fr'): string
+	{
+		return sprintf('%s/include/data/locales/%s/dictionary.txt', ROOT, $lang);
+	}
+
+	static public function getRandomTextFilePath(string $lang = 'fr'): string
+	{
+		return sprintf('%s/include/data/locales/%s/random.txt', ROOT, $lang);
 	}
 
 	/**
@@ -1017,15 +1251,6 @@ class Utils
 		return $url;
 	}
 
-	static public function iconUnicode(string $shape): string
-	{
-		if (!isset(self::ICONS[$shape])) {
-			throw new \UnexpectedValueException('Unknown icon shape: ' . $shape);
-		}
-
-		return self::ICONS[$shape];
-	}
-
 	static public function array_transpose(?array $array): array
 	{
 		$out = [];
@@ -1131,6 +1356,52 @@ class Utils
 		return array($h * 360, $s, $l);
 	}
 
+    static public function hsl2rgb (int $h, int $s, int $l): string
+    {
+        $h /= 60;
+        if ($h < 0) $h = 6 - fmod(-$h, 6);
+        $h = fmod($h, 6);
+
+        $s = max(0, min(1, $s / 100));
+        $l = max(0, min(1, $l / 100));
+
+        $c = (1 - abs((2 * $l) - 1)) * $s;
+        $x = $c * (1 - abs(fmod($h, 2) - 1));
+
+        if ($h < 1) {
+            $r = $c;
+            $g = $x;
+            $b = 0;
+        } elseif ($h < 2) {
+            $r = $x;
+            $g = $c;
+            $b = 0;
+        } elseif ($h < 3) {
+            $r = 0;
+            $g = $c;
+            $b = $x;
+        } elseif ($h < 4) {
+            $r = 0;
+            $g = $x;
+            $b = $c;
+        } elseif ($h < 5) {
+            $r = $x;
+            $g = 0;
+            $b = $c;
+        } else {
+            $r = $c;
+            $g = 0;
+            $b = $x;
+        }
+
+        $m = $l - $c / 2;
+        $r = round(($r + $m) * 255);
+        $g = round(($g + $m) * 255);
+        $b = round(($b + $m) * 255);
+
+        return '#' . dechex($r) . dechex($g) . dechex($b);
+    }
+
 	static public function HTTPCache(?string $hash, ?int $last_change, int $max_age = 3600, bool $immutable = false): bool
 	{
 		$etag = isset($_SERVER['HTTP_IF_NONE_MATCH']) ? trim($_SERVER['HTTP_IF_NONE_MATCH'], '"\' ') : null;
@@ -1151,7 +1422,9 @@ class Utils
 			header(sprintf('Etag: "%s"', $hash), true);
 		}
 
-		if (($etag && $etag === $hash) || ($last_modified && $last_modified >= $last_change)) {
+		// Stop here if nothing changed
+		if (($etag && $hash && $etag === $hash)
+			|| ($last_modified && $last_change && $last_modified >= $last_change)) {
 			http_response_code(304);
 			exit;
 		}
@@ -1265,7 +1538,7 @@ class Utils
 	 */
 	static public function iso8859_1_to_utf8(string $s): string
 	{
-		if (PHP_VERSION_ID < 90000) {
+		if (function_exists('utf8_encode')) {
 			return @utf8_encode($s);
 		}
 
@@ -1371,7 +1644,7 @@ class Utils
 	/**
 	 * Execute a system command with a timeout, just returning a string from stdout
 	 */
-	static public function quick_exec(string $cmd, int $timeout, ?int &$code = null): string
+	static public function quick_exec(string $cmd, int $timeout = 20, ?int &$code = null): string
 	{
 		$output = '';
 		$code = self::exec($cmd, $timeout, null, function($data) use (&$output) { $output .= $data; });
@@ -1403,6 +1676,50 @@ class Utils
 			1 => ["pipe", "w"], // stdout is a pipe that the child will write to
 			2 => ['pipe', 'w'], // stderr
 		];
+
+		// Use Bubblewrap to jail running apps
+		// https://jvns.ca/blog/2022/06/28/some-notes-on-bubblewrap/
+		// In some distant future, using nsjail might be better (more options: timeout, network),
+		// but it's not in Debian yet, see https://bugs.debian.org/964199
+		if (EXECUTION_JAIL === 'bubblewrap') {
+			$args = [
+				'--clearenv',
+				'--new-session',
+				'--die-with-parent',
+				'--unshare-all',
+				'--hostname local',
+				// Bind directories
+				'--ro-bind /bin /bin',
+				'--ro-bind /usr /usr',
+				'--ro-bind /lib /lib',
+				'--ro-bind /lib64 /lib64',
+				'--ro-bind /etc/alternatives /etc/alternatives', // Required for java
+				'--bind /tmp /tmp', // Required for chromium + for reading uploaded files
+				'--proc /proc',
+				'--dev /dev',
+				// Only allow to write to cache, commands should be
+				sprintf('--bind %s %1$s', escapeshellarg(CACHE_ROOT)),
+				sprintf('--ro-bind %s %1$s', escapeshellarg(SHARED_CACHE_ROOT)),
+				sprintf('--chdir %s', escapeshellarg(CACHE_ROOT)),
+			];
+
+			// Allow access to locally stored files, but read-only
+			if (FILE_STORAGE_BACKEND === 'FileSystem') {
+				$args[] = sprintf('--ro-bind %s %1$s', escapeshellarg(FILE_STORAGE_CONFIG));
+			}
+
+			// Only allow network access when required (PDF processors)
+			// TODO: restrict network access to some vhosts, see https://jvns.ca/blog/2022/06/28/some-notes-on-bubblewrap/
+			if (preg_match('/^(prince|chromium|weasyprint)\s+/', $cmd)) {
+				$args[] = '--share-net';
+			}
+
+			if (strpos($cmd, 'chromium ') === 0) {
+				$args[] = '--ro-bind /etc/chromium.d /etc/chromium.d';
+			}
+
+			$cmd = sprintf('bwrap %s %s', implode(' ', $args), $cmd);
+		}
 
 		$process = proc_open($cmd, $descriptorspec, $pipes);
 
@@ -1536,10 +1853,65 @@ class Utils
 		return $code;
 	}
 
+	static public function canDoPDF(): bool
+	{
+		return PDF_COMMAND || Plugins::hasSignal('pdf.create');
+	}
+
 	static protected function getPrinceCommand(): string
 	{
 		$org_name = Config::getInstance()->org_name;
-		return sprintf('prince --http-timeout=3 --pdf-profile="PDF/A-3b" --pdf-author=%s', Utils::escapeshellarg($org_name));
+		return sprintf('prince --no-local-files --http-timeout=3 --pdf-profile="PDF/A-3b" --pdf-author=%s', Utils::escapeshellarg($org_name));
+	}
+
+	static public function getPDFCommand(): ?string
+	{
+		$cmd = PDF_COMMAND;
+
+		if ($cmd === 'auto') {
+			// Try to find a local executable
+			$list = ['prince', 'chromium', 'wkhtmltopdf', 'weasyprint'];
+			$cmd = null;
+
+			foreach ($list as $program) {
+				if (self::quick_exec('which ' . $program, 1)) {
+					$cmd = $program;
+					break;
+				}
+			}
+
+			// We still haven't found anything
+			if (!$cmd) {
+				return null;
+			}
+		}
+
+		return $cmd;
+	}
+
+	/**
+	 * Filter HTML code for use with PDF transformation software
+	 */
+	static public function filterHTMLForPDF(string $str): string
+	{
+		// Make sure no external request is allowed
+		// (Just in case the PDF program doesn't have an allow-list for remote hosts)
+		$str = preg_replace_callback('/<[^>]+(?:src)\s*=\s*(".*?"|\'.*?\'|[^\s]+)[^>]*>/', function (array $match): string {
+			$url = trim(trim($match[1], '"\''));
+
+			if (false !== strpos($url, 'file:')
+				|| !self::isLocalURL($url)) {
+				ErrorManager::reportExceptionSilent(new \LogicException('XSS attempt in HTML used in PDF: ' . $match[0]));
+				return '<!-- Disabled external request -->';
+			}
+
+			return $match[0];
+		}, $str);
+
+		$str = self::appendCookieToURLs($str);
+		$str = preg_replace('!(<html.*?)class="!s', '$1class="pdf ', $str);
+
+		return $str;
 	}
 
 	/**
@@ -1553,11 +1925,11 @@ class Utils
 			throw new \LogicException('PDF generation is disabled');
 		}
 
-		$str = self::appendCookieToURLs($str);
-		$str = preg_replace('!(<html.*?)class="!s', '$1class="pdf ', $str);
+		$str = self::filterHTMLForPDF($str);
 
-		if (PDF_COMMAND === 'auto') {
-			// Try to see if there's a plugin
+		// If there is no program found, try to see if there's a plugin
+		if (PDF_COMMAND === 'auto'
+			&& Plugins::hasSignal('pdf.stream')) {
 			$in = ['string' => $str];
 
 			$signal = Plugins::fire('pdf.stream', true, $in);
@@ -1569,9 +1941,12 @@ class Utils
 			unset($signal, $in);
 		}
 
-		// Only Prince handles using STDIN and STDOUT
-		if (PDF_COMMAND != 'prince') {
-			$file = self::filePDF($str);
+		$cmd = self::getPDFCommand();
+
+		// Only Prince can handle using STDIN and STDOUT and stream PDF
+		// If the program is not Prince, store PDF in temporary file
+		if ($cmd !== 'prince') {
+			$file = self::filePDF($str, false);
 			readfile($file);
 			unlink($file);
 			return;
@@ -1591,27 +1966,28 @@ class Utils
 	/**
 	 * Creates a PDF file from a HTML string
 	 * @param  string $str HTML string
+	 * @param  bool $filter_html TRUE to filter the HTML input
 	 * @return string File path of the PDF file (temporary), you must delete or move it
 	 */
-	static public function filePDF(string $str): ?string
+	static public function filePDF(string $str, bool $filter_html = true): ?string
 	{
-		$cmd = PDF_COMMAND;
-
-		if (!$cmd) {
+		if (!PDF_COMMAND) {
 			throw new \LogicException('PDF generation is disabled');
 		}
 
 		$source = sprintf('%s/print-%s.html', CACHE_ROOT, md5(random_bytes(16)));
 		$target = str_replace('.html', '.pdf', $source);
 
-		$str = self::appendCookieToURLs($str);
-		$str = preg_replace('!(<html.*?)class="!s', '$1class="pdf ', $str);
+		if ($filter_html) {
+			$str = self::filterHTMLForPDF($str);
+		}
 
 		Utils::safe_mkdir(CACHE_ROOT, null, true);
 		file_put_contents($source, $str);
 
-		if ($cmd === 'auto') {
-			// Try to see if there's a plugin
+		// Try to see if there's a plugin first, if PDF_COMMAND is auto
+		if (PDF_COMMAND === 'auto'
+			&& Plugins::hasSignal('pdf.create')) {
 			$in = ['source' => $source, 'target' => $target];
 
 			$signal = Plugins::fire('pdf.create', true, $in);
@@ -1622,22 +1998,12 @@ class Utils
 			}
 
 			unset($in, $signal);
+		}
 
-			// Try to find a local executable
-			$list = ['prince', 'chromium', 'wkhtmltopdf', 'weasyprint'];
-			$cmd = null;
+		$cmd = self::getPDFCommand();
 
-			foreach ($list as $program) {
-				if (self::quick_exec('which ' . $program, 1)) {
-					$cmd = $program;
-					break;
-				}
-			}
-
-			// We still haven't found anything
-			if (!$cmd) {
-				throw new \LogicException('Aucun programme de création de PDF trouvé, merci d\'en installer un : https://fossil.kd2.org/paheko/wiki?name=Configuration');
-			}
+		if (!$cmd) {
+			throw new \LogicException('Aucun programme de création de PDF trouvé, merci d\'en installer un : https://fossil.kd2.org/paheko/wiki?name=Configuration');
 		}
 
 		$timeout = 25;
@@ -1647,7 +2013,7 @@ class Utils
 			$cmd = self::getPrinceCommand() . ' -o %2$s %1$s';
 		}
 		elseif ($cmd === 'chromium') {
-			$cmd = 'chromium --headless --timeout=5000 --disable-gpu --run-all-compositor-stages-before-draw --print-to-pdf-no-header --print-to-pdf=%2$s %1$s';
+			$cmd = 'chromium --headless --timeout=5000 --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf-no-header --print-to-pdf=%2$s %1$s';
 		}
 		elseif ($cmd === 'wkhtmltopdf') {
 			$cmd = 'wkhtmltopdf -q --print-media-type --enable-local-file-access --disable-smart-shrinking --encoding "UTF-8" %s %s';
@@ -1681,16 +2047,34 @@ class Utils
 	}
 
 	/**
-	 * Integer to A-Z, AA-ZZ, AAA-ZZZ, etc.
+	 * Integer to letters: A-Z, AA-ZZ, AAA-ZZZ, etc.
 	 * @see https://www.php.net/manual/fr/function.base-convert.php#94874
 	 */
-	static public function num2alpha(int $n): string {
+	static public function num2alpha(int $n): string
+	{
 		$r = '';
+
 		for ($i = 1; $n >= 0 && $i < 10; $i++) {
 			$r = chr(0x41 + intval($n % pow(26, $i) / pow(26, $i - 1))) . $r;
 			$n -= pow(26, $i);
 		}
+
 		return $r;
+	}
+
+	/**
+	 * Letters to integer
+	 */
+	static public function alpha2num(string $a): int
+	{
+		$r = 0;
+		$l = strlen($a);
+
+		for ($i = 0; $i < $l; $i++) {
+			$r += pow(26, $i) * (ord($a[$l - $i - 1]) - 0x40);
+		}
+
+		return $r - 1;
 	}
 
 	static public function random_string(int $length): string
@@ -1914,6 +2298,12 @@ class Utils
 		}
 
 		return false;
+	}
+
+	static public function linkifyURLs(string $text, string $target = '_blank'): string
+	{
+		$text = preg_replace(';(?<!")\bhttps?://[^<\s]+\b(?!");', '<a href="$0" target="' . $target . '">$0</a>', $text);
+		return $text;
 	}
 
 	static public function showProfiler(): void

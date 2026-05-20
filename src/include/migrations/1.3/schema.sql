@@ -136,12 +136,14 @@ CREATE TABLE IF NOT EXISTS emails (
 	id INTEGER NOT NULL PRIMARY KEY,
 	hash TEXT NOT NULL,
 	verified INTEGER NOT NULL DEFAULT 0,
-	optout INTEGER NOT NULL DEFAULT 0,
 	invalid INTEGER NOT NULL DEFAULT 0,
 	fail_count INTEGER NOT NULL DEFAULT 0,
 	sent_count INTEGER NOT NULL DEFAULT 0,
 	fail_log TEXT NULL,
 	last_sent TEXT NULL,
+	accepts_messages INTEGER NOT NULL DEFAULT 1,
+	accepts_reminders INTEGER NOT NULL DEFAULT 1,
+	accepts_mailings INTEGER NOT NULL DEFAULT 1,
 	added TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -260,8 +262,12 @@ CREATE TABLE IF NOT EXISTS services
 
 	duration INTEGER NULL CHECK (duration IS NULL OR duration > 0), -- En jours
 	start_date TEXT NULL CHECK (start_date IS NULL OR date(start_date) = start_date),
-	end_date TEXT NULL CHECK (end_date IS NULL OR (date(end_date) = end_date AND date(end_date) >= date(start_date)))
+	end_date TEXT NULL CHECK (end_date IS NULL OR (date(end_date) = end_date AND date(end_date) >= date(start_date))),
+
+	archived INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS services_archived ON services (archived);
 
 CREATE TABLE IF NOT EXISTS services_fees
 -- Services fees
@@ -359,7 +365,7 @@ CREATE TABLE IF NOT EXISTS acc_accounts
 
 	position INTEGER NOT NULL, -- position in the balance sheet (position actif/passif/charge/produit)
 	type INTEGER NOT NULL DEFAULT 0, -- type (category) of favourite account: bank, cash, third party, etc.
-	user INTEGER NOT NULL DEFAULT 1, -- 0 = is part of the original chart, 0 = has been added by the user
+	user INTEGER NOT NULL DEFAULT 1, -- 0 = is part of the original chart, 1 = has been added by the user
 	bookmark INTEGER NOT NULL DEFAULT 0 -- 1 = is marked as favorite
 );
 
@@ -434,6 +440,24 @@ CREATE TRIGGER IF NOT EXISTS acc_years_delete BEFORE DELETE ON acc_years BEGIN
 	UPDATE services_fees SET id_account = NULL, id_year = NULL WHERE id_year = OLD.id;
 END;
 
+CREATE TABLE IF NOT EXISTS acc_years_provisional
+-- Provisional (prévisionnel)
+(
+	id_year INTEGER NOT NULL REFERENCES acc_years (id) ON DELETE CASCADE,
+	id_account INTEGER NOT NULL REFERENCES acc_accounts (id) ON DELETE CASCADE,
+	amount INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS acc_years_provisional_id_year ON acc_years_provisional (id_year, id_account);
+
+CREATE TABLE acc_letters (
+	id INTEGER PRIMARY KEY NOT NULL,
+	id_year INTEGER NOT NULL REFERENCES acc_years(id) ON DELETE CASCADE,
+	letter TEXT NOT NULL,
+	created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP CHECK (datetime(created) = created),
+	UNIQUE(id_year, letter)
+);
+
 CREATE TABLE IF NOT EXISTS acc_transactions
 -- Transactions (écritures comptables)
 (
@@ -462,6 +486,7 @@ CREATE INDEX IF NOT EXISTS acc_transactions_type ON acc_transactions (type, id_y
 CREATE INDEX IF NOT EXISTS acc_transactions_status ON acc_transactions (status);
 CREATE INDEX IF NOT EXISTS acc_transactions_hash ON acc_transactions (hash);
 CREATE INDEX IF NOT EXISTS acc_transactions_reference ON acc_transactions (reference);
+CREATE INDEX IF NOT EXISTS acc_transactions_creator ON acc_transactions (id_creator);
 
 CREATE TABLE IF NOT EXISTS acc_transactions_lines
 -- Transactions lines (lignes des écritures)
@@ -480,6 +505,9 @@ CREATE TABLE IF NOT EXISTS acc_transactions_lines
 	reconciled INTEGER NOT NULL DEFAULT 0,
 
 	id_project INTEGER NULL REFERENCES acc_projects(id) ON DELETE SET NULL,
+	id_letter INTEGER NULL REFERENCES acc_letters (id) ON DELETE SET NULL,
+
+	status INTEGER NOT NULL DEFAULT 0, -- bitmask
 
 	CONSTRAINT line_check1 CHECK ((credit * debit) = 0),
 	CONSTRAINT line_check2 CHECK ((credit + debit) > 0)
@@ -489,6 +517,22 @@ CREATE INDEX IF NOT EXISTS acc_transactions_lines_transaction ON acc_transaction
 CREATE INDEX IF NOT EXISTS acc_transactions_lines_account ON acc_transactions_lines (id_account);
 CREATE INDEX IF NOT EXISTS acc_transactions_lines_project ON acc_transactions_lines (id_project);
 CREATE INDEX IF NOT EXISTS acc_transactions_lines_reconciled ON acc_transactions_lines (reconciled);
+CREATE INDEX IF NOT EXISTS acc_transactions_lines_status ON acc_transactions_lines (status);
+
+CREATE TRIGGER IF NOT EXISTS acc_transactions_lines_delete AFTER DELETE ON acc_transactions_lines
+	WHEN OLD.id_letter IS NOT NULL
+	BEGIN
+		DELETE FROM acc_letters WHERE id = OLD.id_letter;
+	END;
+
+CREATE TRIGGER IF NOT EXISTS acc_transactions_lines_update AFTER UPDATE ON acc_transactions_lines
+	WHEN OLD.id_letter IS NOT NULL AND (OLD.debit != NEW.debit
+		OR OLD.id_account != NEW.id_account
+		OR OLD.id_letter != NEW.id_letter
+		OR NEW.id_letter IS NULL)
+	BEGIN
+		DELETE FROM acc_letters WHERE id = OLD.id_letter;
+	END;
 
 CREATE TABLE IF NOT EXISTS acc_transactions_links
 (
@@ -505,12 +549,13 @@ CREATE TABLE IF NOT EXISTS acc_transactions_users
 (
 	id_user INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
 	id_transaction INTEGER NOT NULL REFERENCES acc_transactions (id) ON DELETE CASCADE,
-	id_service_user INTEGER NULL REFERENCES services_users (id) ON DELETE SET NULL,
+	id_service_user INTEGER NULL REFERENCES services_users (id) ON DELETE CASCADE,
 
 	PRIMARY KEY (id_user, id_transaction, id_service_user)
 );
 
 CREATE INDEX IF NOT EXISTS acc_transactions_users_service ON acc_transactions_users (id_service_user);
+CREATE UNIQUE INDEX IF NOT EXISTS acc_transactions_users_unique ON acc_transactions_users (id_user, id_transaction, COALESCE(id_service_user, 0));
 
 ---------- FILES ----------------
 
@@ -639,4 +684,18 @@ CREATE TABLE IF NOT EXISTS web_pages_versions
 	size INTEGER NOT NULL,
 	changes INTEGER NOT NULL,
 	content TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS web_pages_uris
+(
+	id_page INTEGER NOT NULL REFERENCES web_pages ON DELETE CASCADE,
+	uri TEXT NOT NULL,
+	UNIQUE (uri)
+);
+
+CREATE TABLE IF NOT EXISTS web_suspicious_clients
+(
+	ip TEXT NOT NULL,
+	expiry TEXT NOT NULL CHECK (datetime(expiry) = expiry),
+	UNIQUE(ip)
 );

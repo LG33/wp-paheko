@@ -10,16 +10,8 @@
 	{include file="common/dynamic_list_head.tpl"}
 			{foreach from=$list->iterate() item="row"}
 				<tr>
-					<th><a href="fees/?id={$row.id}">{$row.label}</a></th>
-					<td>
-						{if $row.duration}
-							{$row.duration} jours
-						{elseif $row.start_date}
-							{$row.start_date|date_short} au {$row.end_date|date_short}
-						{else}
-							ponctuelle
-						{/if}
-					</td>
+					<th scope="row"><a href="fees/?id={$row.id}">{$row.label}</a></th>
+					<td>{$row.date}</td>
 					<td class="num"><a href="details.php?id={$row.id}&amp;type=active">{$row.nb_users_ok}</a></td>
 					<td class="num"><a href="details.php?id={$row.id}&amp;type=expired">{$row.nb_users_expired}</a></td>
 					<td class="num"><a href="details.php?id={$row.id}&amp;type=unpaid">{$row.nb_users_unpaid}</a></td>
@@ -41,7 +33,7 @@
 	<p class="block alert">Il n'y a aucune activité enregistrée.</p>
 {/if}
 
-{if empty($show_old_services) && $session->canAccess($session::SECTION_USERS, $session::ACCESS_ADMIN)}
+{if empty($show_archived_services) && $session->canAccess($session::SECTION_USERS, $session::ACCESS_ADMIN)}
 	{include file="services/_service_form.tpl" legend="Ajouter une activité" service=null period=0}
 {/if}
 

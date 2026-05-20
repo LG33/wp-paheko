@@ -104,9 +104,11 @@
 			<dt>Numéro pièce comptable</dt>
 			<dd>{if $transaction.reference}<mark>{$transaction.reference}</mark>{else}—{/if}</dd>
 
-			{if $transaction.type != $transaction::TYPE_ADVANCED}
-				<dt>Référence de paiement</dt>
-				<dd>{if $ref = $transaction->getPaymentReference()}<mark>{$ref}</mark>{else}—{/if}</dd>
+			{if $transaction.type !== $transaction::TYPE_ADVANCED}
+				{if $transaction.type !== $transaction::TYPE_CREDIT && $transaction.type !== $transaction::TYPE_DEBT}
+					<dt>Référence de paiement</dt>
+					<dd>{if $ref = $transaction->getPaymentReference()}<mark>{$ref}</mark>{else}—{/if}</dd>
+				{/if}
 				<dt>Projet</dt>
 				<dd>
 				{if $project = $transaction->getProject()}
@@ -167,21 +169,10 @@
 		{/if}
 
 		<div class="transaction-details-advanced{if $simple && $transaction.type !== $transaction::TYPE_ADVANCED} hidden{/if}">
-			<table class="list">
-				<thead>
+			{include file="common/dynamic_list_head.tpl" list=$lines_list}
+			{foreach from=$lines_list->iterate() item="line"}
 					<tr>
-						<td class="num">N° compte</td>
-						<th>Compte</th>
-						<td class="money">Débit</td>
-						<td class="money">Crédit</td>
-						<td>Libellé ligne</td>
-						<td>Référence ligne</td>
-						<td>Projet</td>
-					</tr>
-				</thead>
-				<tbody>
-					{foreach from=$transaction->getLinesWithAccounts() item="line"}
-					<tr>
+						<td class="num">{$line.row}</td>
 						<td class="num"><a href="{$admin_url}acc/accounts/journal.php?id={$line.id_account}&amp;year={$transaction.id_year}">{$line.account_code}</a></td>
 						<td>{$line.account_label}</td>
 						<td class="money">{if $line.debit}{$line.debit|escape|money}{/if}</td>
@@ -190,7 +181,13 @@
 						<td>{$line.reference}</td>
 						<td>
 							{if $line.id_project}
-								{link href="!acc/reports/statement.php?project=%d&year=%d"|args:$line.id_project:$transaction.id_year label=$line.project_name}
+								{link href="!acc/reports/statement.php?project=%d&year=%d"|args:$line.id_project:$transaction.id_year label=$line.project}
+							{/if}
+						</td>
+						<td>{$line.letter}</td>
+						<td>
+							{if $line.is_deposited}
+								{tag label="Déposé" color="lightseagreen"}
 							{/if}
 						</td>
 					</tr>

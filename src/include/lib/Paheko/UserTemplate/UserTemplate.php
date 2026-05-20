@@ -4,11 +4,13 @@ namespace Paheko\UserTemplate;
 
 use KD2\Brindille;
 use KD2\Brindille_Exception;
+use KD2\ErrorManager;
 use KD2\Translate;
 
 use Paheko\Config;
 use Paheko\DB;
 use Paheko\Plugins;
+use Paheko\TemplateException;
 use Paheko\Utils;
 use Paheko\UserException;
 use Paheko\Users\DynamicFields;
@@ -25,7 +27,18 @@ use Paheko\UserTemplate\Sections;
 
 use Paheko\Web\Cache as Web_Cache;
 
-use const Paheko\{WWW_URL, WWW_URI, ADMIN_URL, BASE_URL, SHARED_USER_TEMPLATES_CACHE_ROOT, USER_TEMPLATES_CACHE_ROOT, DATA_ROOT, ROOT, PDF_COMMAND};
+use const Paheko\{
+	WWW_URL,
+	WWW_URI,
+	ADMIN_URL,
+	BASE_URL,
+	SHARED_USER_TEMPLATES_CACHE_ROOT,
+	USER_TEMPLATES_CACHE_ROOT,
+	DATA_ROOT,
+	ROOT,
+	PDF_COMMAND,
+	SHOW_ERRORS
+};
 
 class UserTemplate extends \KD2\Brindille
 {
@@ -86,20 +99,6 @@ class UserTemplate extends \KD2\Brindille
 	 * is displayed.
 	 */
 	protected array $headers = [];
-
-	/**
-	 * Default escaping used for displayed variables.
-	 * ("auto-escaping")
-	 */
-	protected $escape_default = 'html';
-
-	/**
-	 * List of user-defined functions
-	 * @var array
-	 */
-	protected $user_modifiers = [];
-	protected $user_functions = [];
-	protected $user_sections = [];
 
 	/**
 	 * Return TRUE if the filename is probably Brindille template code
@@ -164,7 +163,7 @@ class UserTemplate extends \KD2\Brindille
 		$tpl->toggleSafeMode(true);
 
 		// Disabling escape must be done after safe mode, or it will re-enable htmlspecialchars
-		$tpl->setEscapeDefault(null);
+		$tpl->setEscapeType(null);
 
 		$templates[$hash] = $tpl;
 
@@ -183,7 +182,7 @@ class UserTemplate extends \KD2\Brindille
 			return $root_variables;
 		}
 
-		static $keys = ['color1', 'color2', 'site_disabled', 'org_name', 'org_address', 'org_email', 'org_phone', 'org_web', 'org_infos', 'currency', 'country', 'files'];
+		static $keys = ['color1', 'color2', 'site_disabled', 'org_name', 'org_address', 'org_address_public', 'org_email', 'org_phone', 'org_web', 'org_infos', 'currency', 'country', 'files', 'timezone'];
 
 		$config = Config::getInstance();
 
@@ -204,6 +203,7 @@ class UserTemplate extends \KD2\Brindille
 		$cfg['email_asso'] = $cfg['org_email'];
 		$cfg['telephone_asso'] = $cfg['org_phone'];
 		$cfg['site_asso'] = $cfg['org_web'];
+
 		$cfg['user_fields'] = [
 			'number'   => DynamicFields::getNumberField(),
 			'login'    => DynamicFields::getLoginField(),
@@ -260,8 +260,9 @@ class UserTemplate extends \KD2\Brindille
 		if ($path !== null) {
 			$path = trim($path, '/');
 			$this->_tpl_path = $path;
+			$file = Files::get(File::CONTEXT_MODULES . '/' . $path);
 
-			if ($file = Files::get(File::CONTEXT_MODULES . '/' . $path)) {
+			if ($file) {
 				$this->setSourceFile($file);
 			}
 			else {
@@ -294,29 +295,35 @@ class UserTemplate extends \KD2\Brindille
 			$this->registerDefaults();
 
 			// Disable some advanced modifiers that could be used badly
-			$this->_modifiers_with_instance = [];
-
 			unset($this->_modifiers['sql_user_fields']);
 			unset($this->_modifiers['markdown']);
 			unset($this->_modifiers['sql_where']);
+			unset($this->_modifiers['call']);
+			unset($this->_modifiers['map']);
 		}
 		else {
 			$this->registerAll();
 		}
 	}
 
-	/**
-	 * Set default escaping modifier
-	 */
-	public function setEscapeDefault(?string $default): void
+	protected function registerModifiersArray(array $modifiers, string $class)
 	{
-		$this->escape_default = $default;
+		// Local modifiers
+		foreach ($modifiers as $key => $value) {
+			$modifier = [];
 
-		if (null === $default) {
-			$this->registerModifier('escape', fn($str) => $str);
-		}
-		else {
-			$this->registerModifier('escape', fn ($str) => htmlspecialchars((string)$str) );
+			if (is_string($value)) {
+				$key = $value;
+			}
+			elseif (array_key_exists(0, $value)) {
+				$modifier['types'] = $value;
+			}
+			else {
+				$modifier = $value;
+			}
+
+			$modifier['callback'] ??= [$class, $key];
+			$this->registerModifier($key, $modifier['callback'], $modifier['types'] ?? null, $modifier['pass_object'] ?? false);
 		}
 	}
 
@@ -325,23 +332,12 @@ class UserTemplate extends \KD2\Brindille
 		parent::registerDefaults();
 		$this->assignArray(self::getRootVariables());
 
-		// Common modifiers
-		foreach (CommonModifiers::MODIFIERS_LIST as $key => $name) {
-			$this->registerModifier(is_int($key) ? $name : $key, is_int($key) ? [CommonModifiers::class, $name] : $name);
-		}
+		$this->registerModifiersArray(CommonModifiers::MODIFIERS_LIST, CommonModifiers::class);
+		$this->registerModifiersArray(Modifiers::MODIFIERS_LIST, Modifiers::class);
 
 		// PHP modifiers
-		foreach (CommonModifiers::PHP_MODIFIERS_LIST as $name => $params) {
-			$this->registerModifier($name, [CommonModifiers::class, $name]);
-		}
-
-		// Local modifiers
-		foreach (Modifiers::MODIFIERS_LIST as $key => $name) {
-			$this->registerModifier(is_int($key) ? $name : $key, is_int($key) ? [Modifiers::class, $name] : $name);
-		}
-
-		foreach (Modifiers::MODIFIERS_WITH_INSTANCE_LIST as $key => $name) {
-			$this->registerModifier(is_int($key) ? $name : $key, is_int($key) ? [Modifiers::class, $name] : $name, true);
+		foreach (CommonModifiers::PHP_MODIFIERS_LIST as $name => $types) {
+			$this->registerModifier($name, $name, $types);
 		}
 	}
 
@@ -377,8 +373,8 @@ class UserTemplate extends \KD2\Brindille
 	 */
 	public function setSourceFile(File $file)
 	{
-		if ($file->type != $file::TYPE_FILE) {
-			throw new \LogicException('Cannot construct a UserTemplate with a directory');
+		if ($file->isDir()) {
+			throw new UserException('Cannot construct a UserTemplate with a directory', 404);
 		}
 
 		$this->file = $file;
@@ -457,40 +453,48 @@ class UserTemplate extends \KD2\Brindille
 		}
 	}
 
+	public function fetchAndCatchErrors(): string
+	{
+		try {
+			return $this->fetch();
+		}
+		catch (TemplateException $e) {
+			// Always throw error for code outside of templates (eg. mailing body)
+			if ($this->code) {
+				throw $e;
+			}
+			// If we are in debug mode (SHOW_ERRORS)
+			// or if this is an error from a user-created module and the logged user is an admin,
+			// we want to see the actual template code for the error
+			elseif (($this->path && SHOW_ERRORS)
+				|| ($this->file && Session::getInstance()->isAdmin())) {
+				$this->displayError($e);
+				exit;
+			}
+			// If this is an error from a module created by the user, just display some basic message
+			elseif ($this->module && $this->file) {
+				$message = sprintf('Erreur dans "%s" :' . "\n%s\n" . '(Contactez votre administrateur⋅trice)', $this->file->path, $e->getMessage());
+				$e = new UserException($message, 500, $e);
+				\Paheko\user_error($e);
+				exit;
+			}
+			// This shouldn't happen?
+			// Some possible case is an UserTemplate outside of a module
+			else {
+				throw new \LogicException('Template error outside of a module: ' . $e->getMessage(), 0, $e);
+			}
+		}
+	}
+
 	public function display(): void
 	{
 		$compiled_path = $this->_getCachePath();
 
-		try {
-			$return = $this->displayUsingCache([$this, 'fetchCode'], $compiled_path, $this->modified);
-		}
-		catch (Brindille_Exception $e) {
-			$path = $this->file ? $this->file->path : ($this->code ? 'code' : str_replace(ROOT, '…', $this->path));
-			$is_user_code = !$this->path;
-
-			$message = sprintf("Erreur dans '%s' :\n%s", $path, $e->getMessage());
-
-			if (!$is_user_code) {
-				// We want errors in shipped code to be reported, it is not normal
-				throw new \RuntimeException($message, 0, $e);
-			}
-			elseif ($path !== 'code' && Session::getInstance()->isAdmin()) {
-				// Report error to admin with the highlighted line
-				$this->error($e, $message);
-				return;
-			}
-			else {
-				// Only report error
-				throw new UserException($message, 0, $e);
-			}
-		}
-		catch (\Throwable $e) {
-			throw $e;
-		}
+		$return = $this->displayUsingCache([$this, 'fetchCode'], $compiled_path, $this->modified);
 
 		// If template returned 'STOP' string (eg. from the redirect function),
 		// call exit now. Don't call exit in Brindille functions, or it might mess
-		// with execution of other stuff, for example commitring a DB transaction
+		// with execution of other stuff, for example committing a DB transaction
 		if ($return === 'STOP') {
 			exit;
 		}
@@ -505,6 +509,12 @@ class UserTemplate extends \KD2\Brindille
 		}
 		catch (\Throwable $e) {
 			ob_end_clean();
+
+			// Make sure we always throw a TemplateException
+			if ($e instanceof Brindille_Exception) {
+				$e = new TemplateException($e->getMessage(), $e->getCode(), $e);
+			}
+
 			throw $e;
 		}
 
@@ -655,7 +665,7 @@ class UserTemplate extends \KD2\Brindille
 			];
 
 			if (!isset($codes[$code])) {
-				throw new Brindille_Exception('Code HTTP inconnu: ' . $code);
+				throw new TemplateException('Code HTTP inconnu: ' . $code);
 			}
 
 			header(sprintf('HTTP/1.1 %d %s', $code, $codes[$code]), true);
@@ -709,7 +719,7 @@ class UserTemplate extends \KD2\Brindille
 			throw new \InvalidArgumentException('Not a valid template file extension: ' . $this->path);
 		}
 
-		$content = $this->fetch();
+		$content = $this->fetchAndCatchErrors();
 
 		$this->dumpHeaders();
 
@@ -722,75 +732,90 @@ class UserTemplate extends \KD2\Brindille
 	}
 
 	/**
-	 * Display custom error page for Brindille errors.
+	 * Display custom error page for Brindille/Template errors.
 	 * Because we want to give the admin enough information on the issue
 	 * so they can fix the issue in the code.
 	 */
-	public function error(\Exception $e, string $message)
+	public function displayError(\Exception $e)
 	{
-		// Fetch HTML error header from error_prepend_string (see ErrorManager)
-		$header = ini_get('error_prepend_string');
-		$header = preg_replace('!<if\((sent|logged|report|email|log)\)>(.*?)</if>!is', '', $header);
-		echo $header;
+		http_response_code(500);
+		echo '<!DOCTYPE html><html><head><meta charse="utf-8" /><title>Erreur Brindille</title><style type="text/css">';
+		echo '* { margin: 0; padding: 0; font-size: unset; } body { background: #fee; font-family: sans-serif; } ';
+		echo 'main { background: #fff; padding: 1em; border-radius: 1em; max-width: 50em; margin: 1em auto; }';
+		echo 'h1 { font-size: 1.5em; }';
+		echo 'header { border-bottom: 5px darkred solid; margin-bottom: 1em; padding-bottom: 1em; }';
+		echo 'header h2, header h3 { font-family: monospace; font-size: 1.5em; margin: .4rem 0; }';
+		echo '#icn { color: #fff; font-size: 2em; float: right; margin: 0 1em; padding: 1em; background: #900; border-radius: 50%; }';
+		echo 'section { font-family: monospace; }';
+		echo 'section h1 { white-space: pre-wrap; }';
+		echo 'section table { margin: 1em 0; border: 1px solid #ccc; border-collapse: collapse; }';
+		echo 'section th { vertical-align: top; text-align: right; padding: .3em }';
+		echo 'section table td { white-space: pre-wrap; padding: .3em }';
+		echo 'section .current { background: #fcc; }';
+		echo 'footer { margin-top: 1em; border-top: 5px solid #ccc; padding: 1em; }';
+		echo 'footer p { margin: .5em 0; } footer a { display: inline-block; padding: .3em; border: 2px solid #ddd; color: #000; border-radius: .3em; } ';
+		echo '</style></head><body><main><header><pre id="icn"> \__/<br /> (xx)<br />//||\\\\</pre><h1>';
 
-		$name = strtok($this->_tpl_path, '/');
-		strtok('');
+		echo 'Erreur Brindille';
 
-		$path = $this->file->name ?? $this->path;
-		$location = sprintf('Dans le code du module "%s"', $name);
+		echo '</h1><h2>';
 
-		printf('<section><header><h1>%s</h1><h2>%s</h2></header>',
-			$location, nl2br(htmlspecialchars($message)));
+		printf('Module : %s', $this->module->name);
 
-		if ($this->code || !preg_match('/Line (\d+)\s*:/i', $message, $match)) {
-			return;
-		}
+		echo '</h2><h3>Fichier : ';
 
-		$line = $match[1] - 1;
+		echo $this->file->name ?? str_replace(ROOT, '…', $this->path);
 
-		if ($this->file) {
-			$file = explode("\n", $this->file->fetch());
-		}
-		else {
-			$file = file($path);
-		}
+		echo '</h3></header><section><h1>';
 
-		$start = max(0, $line - 5);
-		$max = min(count($file), $line + 6);
+		echo preg_replace('/\r\n|\n|\r/', '', nl2br(htmlspecialchars($e->getMessage())));
 
-		echo '<pre><code>';
+		echo '</h1><table>';
 
-		for ($i = $start; $i < $max; $i++) {
-			$code = sprintf('<b>%d</b>%s', $i + 1, htmlspecialchars($file[$i]));
+		if (preg_match('/Line (\d+)\s*:/i', $e->getMessage(), $match)) {
+			$line = $match[1] - 1;
 
-			if ($i == $line) {
-				$code = sprintf('<u>%s</u>', $code);
+			if ($this->file) {
+				$file = explode("\n", $this->file->fetch());
+			}
+			else {
+				$file = file($this->path);
 			}
 
-			echo rtrim($code) . "\n";
+			$start = max(0, $line - 5);
+			$max = min(count($file), $line + 6);
+
+			for ($i = $start; $i < $max; $i++) {
+				printf('<tr class="%s"><th>%d</th><td>%s</td></tr>', $i == $line ? 'current' : '', $i + 1, htmlspecialchars($file[$i]));
+			}
+
+			echo '</table>';
 		}
 
-		echo '</code></pre>';
-		exit;
+		echo '</section><footer>';
+
+		if ($this->file) {
+			printf('<p>Vérifiez que vous avez bien la dernière version du module.</p>
+				<p>Si c\'est le cas, contactez l\'auteur⋅e du module : <a href="%s">%s</a></p>
+				<p><strong>Ceci n\'est pas une erreur dans Paheko, merci de ne pas contacter le support Paheko :-)</strong></p>',
+				htmlspecialchars($this->module->author_url ?? ''),
+				htmlspecialchars($this->module->author ?? 'inconnu')
+			);
+		}
+
+		echo '</footer></body></html>';
 	}
 
 	/**
-	 * Override parent Brindille class _callFunction, just to make sure UserException
-	 * (eg. invalid user-entry) are thrown and not converted to Brindille_Exception
-	 * (eg. syntax errors).
+	 * Override parent Brindille class _callFunction, to catch and throw TemplateException and get line number
 	 */
 	public function _callFunction(string $name, array $params, int $line) {
 		try {
 			return call_user_func($this->_functions[$name], $params, $this, $line);
 		}
-		catch (UserException $e) {
-			throw $e;
-		}
-		catch (Brindille_Exception $e) {
-			throw new Brindille_Exception(sprintf("line %d: %s", $line, $e->getMessage()), 0, $e);
-		}
-		catch (\Exception $e) {
-			throw new Brindille_Exception(sprintf("line %d: function '%s' has returned an error: %s\nParameters: %s", $line, $name, $e->getMessage(), substr(var_export($params, true), 6)), 0, $e);
+		catch (Brindille_Exception | TemplateException $e) {
+			$message = sprintf("line %d: function '%s' has returned an error: %s\nParameters: %s", $line, $name, $e->getMessage(), self::printVariable($params));
+			throw new TemplateException($message, $e->getCode(), $e);
 		}
 	}
 
@@ -821,53 +846,5 @@ class UserTemplate extends \KD2\Brindille
 			'storage_root' => $module->storage_root(),
 			'table'        => $module->hasTable() ? $module->table_name() : null,
 		]));
-	}
-
-	/**
-	 * Call a user-defined function (using {{#define}} and {{:call}} {{#call}} etc.)
-	 */
-	public function callUserFunction(string $context, string $name, array $params, int $line)
-	{
-		if ($context !== 'modifier' && $context !== 'function' && $context !== 'section') {
-			throw new \LogicException('Invalid user function context: ' . $context);
-		}
-
-		if (!array_key_exists($name, $this->{'user_' . $context . 's'})) {
-			throw new Brindille_Exception(sprintf('call to undefined user %s \'%s\'', $context, $name));
-		}
-
-		return $this->{'user_' . $context . 's'}[$name]($params, $line);
-	}
-
-	/**
-	 * Register a new user-defined function (this can either be a modifier, function or section)
-	 */
-	public function registerUserFunction(string $context, string $name, callable $function): void
-	{
-		if ($context !== 'modifier' && $context !== 'function' && $context !== 'section') {
-			throw new \LogicException('Invalid user function context: ' . $context);
-		}
-
-		if (!preg_match(self::RE_VALID_VARIABLE_NAME, $name)) {
-			throw new Brindille_Exception(sprintf('Invalid syntax for function name \'%s\'', $name));
-		}
-
-		$this->{'user_' . $context . 's'}[$name] = $function;
-	}
-
-	/**
-	 * Copy user-defined functions between UserTemplate instances
-	 * This is so that a user-defined function defined in an included template
-	 * can be called by the parent template.
-	 */
-	public function copyUserFunctionsTo(UserTemplate $target): void
-	{
-		$contexts = ['modifier', 'function', 'section'];
-
-		foreach ($contexts as $context) {
-			foreach ($this->{'user_' . $context . 's'} as $name => $function) {
-				$target->registerUserFunction($context, $name, $function->bindTo($target));
-			}
-		}
 	}
 }

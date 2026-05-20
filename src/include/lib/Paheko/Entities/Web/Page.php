@@ -74,12 +74,14 @@ class Page extends Entity
 
 	const DUPLICATE_URI_ERROR = 42;
 
+	const VALID_URI_PATTERN = '/^[\w\d_-]+$/';
+
 	protected ?File $_dir = null;
 	protected ?array $_attachments = null;
 	protected ?array $_tagged_attachments = null;
 	protected ?string $_html = null;
 
-	static public function create(int $type, ?int $id_parent, string $title, string $status = self::STATUS_ONLINE): self
+	static public function create(int $type, ?int $id_parent, string $title, int $status = self::STATUS_ONLINE): self
 	{
 		$page = new self;
 		$data = compact('type', 'id_parent', 'title', 'status');
@@ -179,6 +181,14 @@ class Page extends Entity
 	}
 
 	/**
+	 * For test/specific purpose only
+	 */
+	public function setPath(string $path)
+	{
+		return $this->_path = $path;
+	}
+
+	/**
 	 * Get page status, trying to find it from parent pages if different from online
 	 */
 	public function getInheritedStatus(): ?string
@@ -192,7 +202,7 @@ class Page extends Entity
 		return $page->status ?? null;
 	}
 
-	public function getStatus(): string
+	public function getStatus(): int
 	{
 		if ($this->status !== self::STATUS_ONLINE) {
 			return $this->status;
@@ -255,7 +265,7 @@ class Page extends Entity
 		$this->dir()->indexForSearch($content, $this->title, 'text/html');
 	}
 
-	public function saveNewVersion(?int $user_id): bool
+	public function saveNewVersion(?int $user_id = null): bool
 	{
 		$content_modified = $this->isModified('content');
 		$prev_content = $this->getModifiedProperty('content');
@@ -272,7 +282,7 @@ class Page extends Entity
 				'date'    => new \DateTime,
 				'content' => $this->content,
 				'size'    => $l,
-				'changes' => $l - mb_strlen($prev_content),
+				'changes' => $l - mb_strlen((string)$prev_content),
 			];
 
 			$db->insert('web_pages_versions', $version);
@@ -292,13 +302,38 @@ class Page extends Entity
 	public function save(bool $selfcheck = true): bool
 	{
 		$dir = null;
+		$old_uri = null;
 
-		if (!$this->exists() || $this->isModified('status')) {
+		// Set default status
+		if (!isset($this->status)) {
+			$this->set('status', self::STATUS_ONLINE);
+		}
+
+		if (!isset($this->type)) {
+			$this->set('type', self::TYPE_PAGE);
+		}
+
+		if (!isset($this->format)) {
+			$this->set('format', self::FORMAT_MARKDOWN);
+		}
+
+		if (!isset($this->published)) {
+			$this->set('published', new \DateTime);
+		}
+
+		// Set default inherited status value
+		// This might be overwritten by updateChildrenInheritedStatus just after save
+		// as we don't know the status of the parent category at this point.
+		if (!isset($this->inherited_status)) {
 			$this->set('inherited_status', $this->status);
 		}
 
 		if ($this->isModified('uri')) {
 			$dir = Files::get(File::CONTEXT_WEB . '/' . $this->getModifiedProperty('uri'));
+		}
+
+		if ($this->isModified('uri') && $this->exists()) {
+			$old_uri = $this->getModifiedProperty('uri');
 		}
 
 		// Update modified date if required
@@ -307,7 +342,9 @@ class Page extends Entity
 		}
 
 		$update_search = $this->isModified('content') || $this->isModified('title');
-		$update_children = ($this->isModified('status') && $this->type === self::TYPE_CATEGORY) || $this->isModified('id_parent');
+		$update_children = $this->isModified('status')
+			|| $this->isModified('id_parent')
+			|| !$this->exists();
 
 		parent::save($selfcheck);
 
@@ -321,6 +358,11 @@ class Page extends Entity
 
 		if ($update_search) {
 			$this->syncSearch();
+		}
+
+		// Keep trace of old URIs so that a page that has been moved will get a redirect
+		if ($old_uri) {
+			DB::getInstance()->preparedQuery('REPLACE INTO web_pages_uris (id_page, uri) VALUES (?, ?);', $this->id(), $old_uri);
 		}
 
 		Cache::clear();
@@ -342,16 +384,36 @@ class Page extends Entity
 		return $r;
 	}
 
+	public function set(string $key, $value)
+	{
+		// Remove WWW_URL from internal markdown text links, this makes it easier to spot internal dead links later
+		if ($key === 'content') {
+			$pattern = sprintf('!\[(.*?)\]\(%s([\w\d_-]+?)\)!', preg_quote(WWW_URL, '!'));
+			$value = preg_replace($pattern, '[$1]($2)', $value);
+		}
+
+		parent::set($key, $value);
+	}
+
 	public function selfCheck(): void
 	{
 		$db = DB::getInstance();
+		$this->assert(isset($this->uri), 'URI not set');
+		$this->assert(isset($this->title), 'Title not set');
+		$this->assert(isset($this->type), 'Type not set');
+		$this->assert(isset($this->status), 'Status not set');
+		$this->assert(isset($this->format), 'Format not set');
+		$this->assert(isset($this->published), 'Publication date not set');
+		$this->assert(isset($this->modified), 'Modification date not set');
+
 		$this->assert($this->type === self::TYPE_CATEGORY || $this->type === self::TYPE_PAGE, 'Unknown page type');
 		$this->assert(array_key_exists($this->status, self::STATUS_LIST), 'Unknown page status');
 		$this->assert(array_key_exists($this->format, self::FORMATS_LIST), 'Unknown page format');
 		$this->assert(trim($this->title) !== '', 'Le titre ne peut rester vide');
 		$this->assert(mb_strlen($this->title) <= 200, 'Le titre ne peut faire plus de 200 caractères');
-		$this->assert(trim($this->uri) !== '', 'L\'URI ne peut rester vide');
-		$this->assert(strlen($this->uri) <= 150, 'L\'URI ne peut faire plus de 150 caractères');
+		$this->assert(trim($this->uri) !== '', 'L\'adresse unique ne peut rester vide');
+		$this->assert(strlen($this->uri) <= 150, 'L\'adresse unique ne peut faire plus de 150 caractères');
+		$this->assert(preg_match(self::VALID_URI_PATTERN, $this->uri), 'Adresse unique invalide');
 
 		if ($this->exists()) {
 			$this->assert($this->id_parent !== $this->id(), 'Invalid parent page');
@@ -383,7 +445,7 @@ class Page extends Entity
 			$source['published'] = $source['date'] . ' ' . $source['date_time'];
 		}
 
-		if (isset($source['title']) && !$this->exists()) {
+		if (isset($source['title']) && !isset($source['uri']) && !$this->exists()) {
 			$source['uri'] = Modifiers::remove_leading_number($source['title']);
 		}
 
