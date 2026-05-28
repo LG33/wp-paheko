@@ -274,7 +274,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const ROOT = __DIR__;
+const ROOT = __DIR__;
 
 /**
  * DATA_ROOT
@@ -285,7 +285,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const DATA_ROOT = ROOT . '/data';
+const DATA_ROOT = ROOT . '/data';
 
 /**
  * BACKUPS_ROOT
@@ -346,7 +346,7 @@ namespace Paheko;
  * @var  string
  */
 
-//const DB_FILE = DATA_ROOT . '/association.sqlite';
+const DB_FILE = DATA_ROOT . '/db/association.sqlite';
 
 /**
  * Emplacement de stockage des plugins

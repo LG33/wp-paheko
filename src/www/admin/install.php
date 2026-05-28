@@ -59,14 +59,18 @@ $form->runIf('save', function () use ($wp_user) {
 
 	foreach ($default_plugins as $key => $plugin) {
 		if (Plugins::exists($plugin) && Plugins::isAllowed($plugin)) {
-			Extensions::toggle($plugin, true);
+			if ($ext = Extensions::get($plugin)) {
+				$ext->enable();
+			}
 		}
 	}
 
 	$default_modules = ['helloasso_checkout_snippets', 'expenses_claims', 'receipt', 'receipt_donation', 'recus_fiscaux', 'transactions_templates'];
 
 	foreach ($default_modules as $key => $module) {
-		Extensions::toggle($module, true);
+		if ($ext = Extensions::get($module)) {
+			$ext->enable();
+		}
 	}
 }, $csrf_key, ADMIN_URL);
 

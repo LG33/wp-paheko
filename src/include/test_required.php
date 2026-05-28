@@ -73,7 +73,7 @@ test_required(
 );
 
 test_required(
-	class_exists('KD2\\HTTP'),
+	file_exists(__DIR__ . '/lib/KD2/HTTP.php'),
 	'Librairie KD2 non disponible.'
 );
 

@@ -32,7 +32,7 @@ if (!defined('WPINC')) {
 /**
  * Currently plugin version.
  */
-define('WP_PAHEKO_VERSION', '1.3.12.2');
+define('WP_PAHEKO_VERSION', '1.3.20.0');
 
 function wp_paheko_activation_redirect($plugin)
 {
