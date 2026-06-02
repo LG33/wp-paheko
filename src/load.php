@@ -79,16 +79,48 @@ add_action('admin_bar_menu', 'wp_paheko_adminbar_item', 999);
 function wp_paheko_cron_exec()
 {
 	require_once __DIR__ . '/config.local.php';
+	
+	if (!defined('Paheko\ROOT')) define('Paheko\ROOT', __DIR__);
+	if (!defined('Paheko\DATA_ROOT')) define('Paheko\DATA_ROOT', \Paheko\ROOT . '/data');
+	if (!defined('Paheko\PLUGINS_ROOT')) define('Paheko\PLUGINS_ROOT', \Paheko\DATA_ROOT . '/plugins');
+	if (!defined('Paheko\CACHE_ROOT')) define('Paheko\CACHE_ROOT', \Paheko\DATA_ROOT . '/cache');
+	if (!defined('Paheko\DB_FILE')) define('Paheko\DB_FILE', \Paheko\DATA_ROOT . '/association.sqlite');
+	if (!defined('Paheko\SQLITE_JOURNAL_MODE')) define('Paheko\SQLITE_JOURNAL_MODE', 'TRUNCATE');
+	if (!defined('Paheko\SQL_DEBUG')) define('Paheko\SQL_DEBUG', false);
+	if (!defined('Paheko\ENABLE_PROFILER')) define('Paheko\ENABLE_PROFILER', false);
+	if (!defined('Paheko\USE_CRON')) define('Paheko\USE_CRON', false);
+	if (!defined('Paheko\FILE_VERSIONING_POLICY')) define('Paheko\FILE_VERSIONING_POLICY', null);
+	if (!defined('Paheko\SYSTEM_SIGNALS')) define('Paheko\SYSTEM_SIGNALS', []);
+	if (!defined('Paheko\PLUGINS_ALLOWLIST')) define('Paheko\PLUGINS_ALLOWLIST', null);
+	if (!defined('Paheko\PLUGINS_BLOCKLIST')) define('Paheko\PLUGINS_BLOCKLIST', null);
+	
+	// Register PSR-0 autoloader for Paheko and KD2 classes
+	spl_autoload_register(function (string $classname): void {
+		$classname = ltrim($classname, '\\');
+		$filename = str_replace('\\', '/', $classname);
+		$path = \Paheko\ROOT . '/include/lib/' . $filename . '.php';
+		if (file_exists($path)) {
+			require_once $path;
+		}
+	}, true);
 
-	if(!defined('Paheko\ROOT')) define('Paheko\ROOT', __DIR__);
-	if(!defined('Paheko\DATA_ROOT')) define('Paheko\DATA_ROOT', Paheko\ROOT . '/data');
-	if(!defined('Paheko\CACHE_ROOT')) define('Paheko\CACHE_ROOT', Paheko\DATA_ROOT . '/cache');
-	if(!defined('Paheko\USE_CRON')) define('Paheko\USE_CRON', false);
+	if (file_exists(__DIR__ . '/data/plugins/helloasso_checkout/lib/HelloAsso.php')) {
+		require_once __DIR__ . '/data/plugins/helloasso_checkout/lib/HelloAsso.php';
+		require_once __DIR__ . '/data/plugins/helloasso_checkout/lib/API.php';
+	}
+
+	function paheko_version() {
+		return 'unknown';
+	}
+	
+	error_log( Paheko\USE_CRON );
+	error_log( @filemtime(Paheko\CACHE_ROOT . '/last_cron_run') );
 
 	if (!Paheko\USE_CRON && @filemtime(Paheko\CACHE_ROOT . '/last_cron_run') < (time() - 24*3600)) {
 		touch(Paheko\CACHE_ROOT . '/last_cron_run');
-		require_once __DIR__ . '/include/lib/Paheko/CLI.php';
+		\KD2\DB\EntityManager::setGlobalDB(\Paheko\DB::getInstance());
 		(new Paheko\CLI)->cron();
+	    error_log( "Paheko cron executed" );
 	}
 }
 add_action( 'wp_paheko_cron_hook', 'wp_paheko_cron_exec' );
