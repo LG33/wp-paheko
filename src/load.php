@@ -84,6 +84,11 @@ function wp_paheko_cron_exec()
 	if (!defined('Paheko\DATA_ROOT')) define('Paheko\DATA_ROOT', \Paheko\ROOT . '/data');
 	if (!defined('Paheko\PLUGINS_ROOT')) define('Paheko\PLUGINS_ROOT', \Paheko\DATA_ROOT . '/plugins');
 	if (!defined('Paheko\CACHE_ROOT')) define('Paheko\CACHE_ROOT', \Paheko\DATA_ROOT . '/cache');
+    if (!defined('Paheko\USER_TEMPLATES_CACHE_ROOT')) define('Paheko\USER_TEMPLATES_CACHE_ROOT', \Paheko\CACHE_ROOT . '/utemplates');
+    if (!defined('Paheko\STATIC_CACHE_ROOT')) define('Paheko\STATIC_CACHE_ROOT', \Paheko\CACHE_ROOT . '/static');
+    if (!defined('Paheko\SHARED_CACHE_ROOT')) define('Paheko\SHARED_CACHE_ROOT', \Paheko\CACHE_ROOT . '/shared');
+    if (!defined('Paheko\SHARED_USER_TEMPLATES_CACHE_ROOT')) define('Paheko\SHARED_USER_TEMPLATES_CACHE_ROOT', \Paheko\SHARED_CACHE_ROOT . '/utemplates');
+    if (!defined('Paheko\SMARTYER_CACHE_ROOT')) define('Paheko\SMARTYER_CACHE_ROOT', \Paheko\SHARED_CACHE_ROOT . '/compiled');
 	if (!defined('Paheko\DB_FILE')) define('Paheko\DB_FILE', \Paheko\DATA_ROOT . '/association.sqlite');
 	if (!defined('Paheko\SQLITE_JOURNAL_MODE')) define('Paheko\SQLITE_JOURNAL_MODE', 'TRUNCATE');
 	if (!defined('Paheko\SQL_DEBUG')) define('Paheko\SQL_DEBUG', false);
